@@ -13,3 +13,17 @@ build/
 
 *.log
 .DS_Store
+
+cookies.txt
+
+
+
+# Authentication / test cookies
+*-cookies.txt
+cookies.txt
+
+# Temporary test / development files
+reset-admin-password-temprorry-file.js
+test-models.js
+clear
+curl
