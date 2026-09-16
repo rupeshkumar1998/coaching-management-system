@@ -20,6 +20,9 @@ const teacherRoutes = require("./routes/teacherRoutes");
 
 const teacherAttendanceRoutes = require("./routes/teacherAttendanceRoutes");
 
+const subjectRoutes = require("./routes/subjectRoutes");
+
+
 const app = express();
 
 // MongoDB Connection
@@ -78,6 +81,12 @@ app.use(
 
 // Teacher Attendance Routes
 app.use("/api/admin/teacher-attendance", teacherAttendanceRoutes);
+
+
+// Subject Routes
+app.use("/api/admin/subjects", subjectRoutes);
+
+
 
 // Health Check API
 app.get("/api/health", (req, res) => {
