@@ -118,6 +118,13 @@ const instituteSchema = new mongoose.Schema(
       maxlength: [30, "Institute code cannot exceed 30 characters"],
     },
 
+    ownerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+
     email: {
       type: String,
       trim: true,
