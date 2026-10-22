@@ -122,7 +122,7 @@ const instituteSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
-      index: true,
+ //     index: true,
     },
 
     email: {
@@ -208,6 +208,18 @@ const instituteSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+
+instituteSchema.index(
+  { ownerId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      ownerId: { $type: "objectId" },
+    },
+  }
+);
+
 
 const Institute = mongoose.model("Institute", instituteSchema);
 

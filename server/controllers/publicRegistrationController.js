@@ -2,8 +2,11 @@ const Institute = require("../models/Institute");
 const User = require("../models/User");
 const Subscription = require("../models/Subscription");
 const Payment = require("../models/Payment");
-
 const { hashPassword } = require("../services/authService");
+
+const {
+  getPublishedSubscriptionPlan,
+} = require("../services/publishedSubscriptionPlanService");
 
 const registerInstitute = async (req, res) => {
   try {
@@ -56,19 +59,33 @@ const registerInstitute = async (req, res) => {
     // 3. Validate subscription plan
     // --------------------------------
 
-    const allowedPlans = [
-      "FREE",
-      "BASIC",
-      "PRO",
-      "ENTERPRISE",
-    ];
+    // --------------------------------
+    // 3. Load the currently published plan version
+    // --------------------------------
 
-    if (!allowedPlans.includes(plan)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid subscription plan",
-      });
+    let publishedPlan;
+    let planVersion;
+
+    try {
+      const result = await getPublishedSubscriptionPlan(plan);
+
+      publishedPlan = result.plan;
+      planVersion = result.version;
+    } catch (error) {
+      if (error.code) {
+        return res.status(error.status || 400).json({
+          success: false,
+          code: error.code,
+          message: error.message,
+        });
+      }
+
+      throw error;
     }
+
+    const normalizedPlanCode = publishedPlan.code;
+    const amount = planVersion.amount;
+    const currency = planVersion.currency;
 
     // --------------------------------
     // 4. Check duplicate institute code
@@ -101,21 +118,6 @@ const registerInstitute = async (req, res) => {
     }
 
     // --------------------------------
-    // 6. Determine subscription amount
-    // --------------------------------
-    // IMPORTANT:
-    // Client amount is NEVER trusted.
-
-    const planPrices = {
-      FREE: 0,
-      BASIC: 999,
-      PRO: 1999,
-      ENTERPRISE: 4999,
-    };
-
-    const amount = planPrices[plan];
-
-    // --------------------------------
     // 7. Create Institute
     // --------------------------------
 
@@ -136,7 +138,7 @@ const registerInstitute = async (req, res) => {
       isActive: false,
 
       subscriptionStatus: "PENDING",
-      subscriptionPlan: plan,
+      subscriptionPlan: normalizedPlanCode,
     });
 
     // --------------------------------
@@ -185,15 +187,30 @@ const registerInstitute = async (req, res) => {
     try {
       subscription = await Subscription.create({
         instituteId: institute._id,
-
-        plan,
-
+        subscriptionType: "STANDARD",
+        plan: normalizedPlanCode,
+        planVersion: planVersion.version,
+        planVersionId: planVersion._id,
         amount,
+        currency,
+        paymentRequired: planVersion.paymentRequired,
+        durationDays: planVersion.durationDays,
 
-        currency: "INR",
+        features: (planVersion.features || []).map(
+          ({ key, enabled }) => ({
+            key,
+            enabled,
+          })
+        ),
+
+        limits: (planVersion.limits || []).map(
+          ({ key, value }) => ({
+            key,
+            value,
+          })
+        ),
 
         status: "PENDING",
-
         autoRenew: false,
       });
     } catch (error) {
@@ -207,34 +224,31 @@ const registerInstitute = async (req, res) => {
     // 11. Create Payment Request
     // --------------------------------
 
-    let payment;
+    // --------------------------------
+    // 11. Create Payment Request (paid plans only)
+    // --------------------------------
 
-    try {
-      payment = await Payment.create({
-        instituteId: institute._id,
+    let payment = null;
 
-        subscriptionId: subscription._id,
+    if (planVersion.paymentRequired === true) {
+      try {
+        payment = await Payment.create({
+          instituteId: institute._id,
+          subscriptionId: subscription._id,
+          paymentType: "INSTITUTE_SUBSCRIPTION",
+          amount,
+          currency,
+          method: "MANUAL_UPI",
+          gateway: "NONE",
+          status: "PENDING",
+        });
+      } catch (error) {
+        await Subscription.findByIdAndDelete(subscription._id);
+        await User.findByIdAndDelete(adminUser._id);
+        await Institute.findByIdAndDelete(institute._id);
 
-        paymentType: "INSTITUTE_SUBSCRIPTION",
-
-        amount,
-
-        currency: "INR",
-
-        // Initial system:
-        // Manual payment
-        method: "MANUAL_UPI",
-
-        gateway: "NONE",
-
-        status: "PENDING",
-      });
-    } catch (error) {
-      await Subscription.findByIdAndDelete(subscription._id);
-      await User.findByIdAndDelete(adminUser._id);
-      await Institute.findByIdAndDelete(institute._id);
-
-      throw error;
+        throw error;
+      }
     }
 
     // --------------------------------
@@ -244,8 +258,9 @@ const registerInstitute = async (req, res) => {
     return res.status(201).json({
       success: true,
 
-      message:
-        "Institute registration submitted successfully. Awaiting payment verification and Super Admin approval.",
+      message: planVersion.paymentRequired
+        ? "Institute registration submitted successfully. Awaiting payment verification and Super Admin approval."
+        : "Institute registration submitted successfully. Awaiting Super Admin approval.",
 
       data: {
         institute: {
@@ -271,13 +286,15 @@ const registerInstitute = async (req, res) => {
           status: subscription.status,
         },
 
-        payment: {
-          id: payment._id,
-          amount: payment.amount,
-          currency: payment.currency,
-          method: payment.method,
-          status: payment.status,
-        },
+        payment: payment
+          ? {
+              id: payment._id,
+              amount: payment.amount,
+              currency: payment.currency,
+              method: payment.method,
+              status: payment.status,
+            }
+          : null,
       },
     });
   } catch (error) {

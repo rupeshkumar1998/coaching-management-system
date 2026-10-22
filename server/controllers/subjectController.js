@@ -422,7 +422,7 @@ const updateSubject = async (req, res) => {
         $set: updateData,
       },
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
       }
     ).lean();
@@ -483,7 +483,7 @@ const activateSubject = async (req, res) => {
         },
       },
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
       }
     ).lean();
@@ -544,7 +544,7 @@ const deactivateSubject = async (req, res) => {
         },
       },
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
       }
     ).lean();
@@ -624,7 +624,7 @@ const deleteSubject = async (req, res) => {
         },
       },
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
       }
     ).lean();

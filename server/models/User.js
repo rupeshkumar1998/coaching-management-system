@@ -42,6 +42,7 @@ const userSchema = new mongoose.Schema(
       required: true,
       enum: [
         "SUPER_ADMIN",
+        "INSTITUTE_OWNER",
         "INSTITUTE_ADMIN",
         "TEACHER",
         "STUDENT",

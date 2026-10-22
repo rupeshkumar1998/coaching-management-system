@@ -1,0 +1,643 @@
+const mongoose = require("mongoose");
+
+const Institute = require("./models/Institute");
+const Subscription = require("./models/Subscription");
+const Payment = require("./models/Payment");
+const User = require("./models/User");
+
+const {
+  activateSubscription,
+  transitionSubscriptionStatus,
+  getEffectiveSubscription,
+} = require("./services/subscriptionService");
+
+const {
+  SUBSCRIPTION_STATUS,
+} = require("./constants/subscriptionStatuses");
+
+const MONGO_URI =
+  process.env.MONGO_URI ||
+  "mongodb://127.0.0.1:27017/coaching_management";
+
+const TEST_PREFIX = "SUB_SERVICE_TEST_";
+
+const results = [];
+
+const pass = (name) => {
+  results.push({
+    test: name,
+    status: "PASS",
+  });
+  console.log(`PASS: ${name}`);
+};
+
+const fail = (name, error) => {
+  results.push({
+    test: name,
+    status: "FAIL",
+    error: error.message,
+  });
+  console.error(`FAIL: ${name}`);
+  console.error(`     ${error.message}`);
+};
+
+const expectErrorCode = async (
+  name,
+  fn,
+  expectedCode
+) => {
+  try {
+    await fn();
+
+    fail(
+      name,
+      new Error(
+        `Expected error code ${expectedCode}, but operation succeeded`
+      )
+    );
+  } catch (error) {
+    if (error.code !== expectedCode) {
+      fail(
+        name,
+        new Error(
+          `Expected ${expectedCode}, received ${error.code || "NO_CODE"}: ${error.message}`
+        )
+      );
+      return;
+    }
+
+    pass(name);
+  }
+};
+
+const createTestInstitute = async (suffix) => {
+  return Institute.create({
+    name: `${TEST_PREFIX}${suffix}`,
+ //   code: `${TEST_PREFIX}${suffix}_${Date.now()}`,
+    code: `SUBT_${suffix}_${Date.now()}`,
+    approvalStatus: "APPROVED",
+    isActive: true,
+    subscriptionStatus: "PENDING",
+    subscriptionPlan: "FREE",
+  });
+};
+
+const createSubscription = async ({
+  instituteId,
+  subscriptionType = "STANDARD",
+  plan = "BASIC",
+  amount = 999,
+  paymentRequired = true,
+  durationDays = 30,
+  trialGrantedBy = null,
+}) => {
+  return Subscription.create({
+    instituteId,
+    subscriptionType,
+    plan,
+    planVersion: 1,
+    amount,
+    currency: "INR",
+    paymentRequired,
+    durationDays,
+    status: SUBSCRIPTION_STATUS.PENDING,
+    autoRenew: false,
+    trialGrantedBy,
+  });
+};
+
+const createPayment = async ({
+  instituteId,
+  subscriptionId,
+  status = "PENDING",
+}) => {
+  return Payment.create({
+    instituteId,
+    subscriptionId,
+    paymentType: "INSTITUTE_SUBSCRIPTION",
+    amount: 999,
+    currency: "INR",
+    method: "MANUAL_UPI",
+    gateway: "NONE",
+    transactionId: `${TEST_PREFIX}TXN_${Date.now()}_${Math.random()}`,
+    status,
+    verifiedAt:
+      status === "VERIFIED"
+        ? new Date()
+        : null,
+  });
+};
+
+const run = async () => {
+  let testInstitute = null;
+  let trialInstitute = null;
+  let paymentInstitute = null;
+  let suspensionInstitute = null;
+
+  try {
+    await mongoose.connect(MONGO_URI);
+
+    console.log(
+      "\nConnected to MongoDB for subscription service regression.\n"
+    );
+
+    // -----------------------------------------------------
+    // TEST 1
+    // FREE subscription should not require payment
+    // -----------------------------------------------------
+
+    testInstitute =
+      await createTestInstitute("FREE");
+
+    const freeSubscription =
+      await createSubscription({
+        instituteId: testInstitute._id,
+        plan: "FREE",
+        amount: 0,
+        paymentRequired: false,
+        durationDays: null,
+      });
+
+    await activateSubscription({
+      subscriptionId:
+        freeSubscription._id,
+    });
+
+    const freeActivated =
+      await Subscription.findById(
+        freeSubscription._id
+      );
+
+    if (
+      freeActivated.status ===
+        SUBSCRIPTION_STATUS.ACTIVE &&
+      freeActivated.startDate &&
+      freeActivated.endDate === null
+    ) {
+      pass("FREE subscription activates without payment");
+    } else {
+      fail(
+        "FREE subscription activates without payment",
+        new Error(
+          "FREE subscription did not receive expected ACTIVE state"
+        )
+      );
+    }
+
+    // -----------------------------------------------------
+    // TEST 2
+    // TRIAL subscription should not require payment
+    // -----------------------------------------------------
+
+    trialInstitute =
+      await createTestInstitute("TRIAL");
+
+    const trialUser =
+      await User.findOne({
+        role: "SUPER_ADMIN",
+        isDeleted: false,
+      }).select("_id");
+
+    if (!trialUser) {
+      throw new Error(
+        "Existing SUPER_ADMIN required for trial regression test"
+      );
+    }
+
+    const trialSubscription =
+      await createSubscription({
+        instituteId: trialInstitute._id,
+        subscriptionType: "TRIAL",
+        plan: "PRO",
+        amount: 0,
+        paymentRequired: false,
+        durationDays: 30,
+        trialGrantedBy: trialUser._id,
+      });
+
+    await activateSubscription({
+      subscriptionId:
+        trialSubscription._id,
+      activatedBy: trialUser._id,
+    });
+
+    const trialActivated =
+      await Subscription.findById(
+        trialSubscription._id
+      );
+
+    if (
+      trialActivated.status ===
+        SUBSCRIPTION_STATUS.ACTIVE &&
+      trialActivated.startDate &&
+      trialActivated.endDate
+    ) {
+      pass("TRIAL subscription activates without payment");
+    } else {
+      fail(
+        "TRIAL subscription activates without payment",
+        new Error(
+          "TRIAL subscription did not activate correctly"
+        )
+      );
+    }
+
+    // -----------------------------------------------------
+    // TEST 3
+    // Paid subscription without verified payment
+    // must be blocked.
+    // -----------------------------------------------------
+
+    paymentInstitute =
+      await createTestInstitute("PAYMENT");
+
+    const unpaidSubscription =
+      await createSubscription({
+        instituteId: paymentInstitute._id,
+        plan: "BASIC",
+        amount: 999,
+        paymentRequired: true,
+        durationDays: 30,
+      });
+
+    await expectErrorCode(
+      "Paid subscription without verified payment is blocked",
+      () =>
+        activateSubscription({
+          subscriptionId:
+            unpaidSubscription._id,
+        }),
+      "PAYMENT_NOT_VERIFIED"
+    );
+
+    // -----------------------------------------------------
+    // TEST 4
+    // Verified payment allows activation
+    // -----------------------------------------------------
+
+    await createPayment({
+      instituteId:
+        paymentInstitute._id,
+      subscriptionId:
+        unpaidSubscription._id,
+      status: "VERIFIED",
+    });
+
+    await activateSubscription({
+      subscriptionId:
+        unpaidSubscription._id,
+    });
+
+    const paidActivated =
+      await Subscription.findById(
+        unpaidSubscription._id
+      );
+
+    if (
+      paidActivated.status ===
+      SUBSCRIPTION_STATUS.ACTIVE
+    ) {
+      pass(
+        "Paid subscription with verified payment activates"
+      );
+    } else {
+      fail(
+        "Paid subscription with verified payment activates",
+        new Error(
+          "Subscription did not become ACTIVE"
+        )
+      );
+    }
+
+    // -----------------------------------------------------
+    // TEST 5
+    // Second ACTIVE subscription blocked
+    // -----------------------------------------------------
+
+    const duplicateSubscription =
+      await createSubscription({
+        instituteId:
+          paymentInstitute._id,
+        plan: "BASIC",
+        amount: 999,
+        paymentRequired: true,
+        durationDays: 30,
+      });
+
+    await createPayment({
+      instituteId:
+        paymentInstitute._id,
+      subscriptionId:
+        duplicateSubscription._id,
+      status: "VERIFIED",
+    });
+
+    await expectErrorCode(
+      "Second ACTIVE subscription is blocked",
+      () =>
+        activateSubscription({
+          subscriptionId:
+            duplicateSubscription._id,
+        }),
+      "ACTIVE_SUBSCRIPTION_EXISTS"
+    );
+
+    // -----------------------------------------------------
+    // TEST 6
+    // Invalid lifecycle transition
+    // PENDING -> EXPIRED
+    // -----------------------------------------------------
+
+    const invalidTransitionSubscription =
+      await createSubscription({
+        instituteId:
+          paymentInstitute._id,
+        plan: "BASIC",
+        amount: 999,
+        paymentRequired: true,
+        durationDays: 30,
+      });
+
+    await expectErrorCode(
+      "Invalid PENDING to EXPIRED transition is blocked",
+      () =>
+        transitionSubscriptionStatus({
+          subscriptionId:
+            invalidTransitionSubscription._id,
+          targetStatus:
+            SUBSCRIPTION_STATUS.EXPIRED,
+        }),
+      "INVALID_STATUS_TRANSITION"
+    );
+
+    // -----------------------------------------------------
+    // TEST 7
+    // Institute summary synchronization
+    // -----------------------------------------------------
+
+    const instituteAfterActivation =
+      await Institute.findById(
+        paymentInstitute._id
+      );
+
+    if (
+      instituteAfterActivation.subscriptionPlan ===
+        "BASIC" &&
+      instituteAfterActivation.subscriptionStatus ===
+        "ACTIVE"
+    ) {
+      pass(
+        "Institute subscription summary is synchronized"
+      );
+    } else {
+      fail(
+        "Institute subscription summary is synchronized",
+        new Error(
+          `Unexpected summary: plan=${instituteAfterActivation.subscriptionPlan}, status=${instituteAfterActivation.subscriptionStatus}`
+        )
+      );
+    }
+
+    // -----------------------------------------------------
+    // TEST 8
+    // ACTIVE -> SUSPENDED
+    // -----------------------------------------------------
+
+    await transitionSubscriptionStatus({
+      subscriptionId:
+        unpaidSubscription._id,
+      targetStatus:
+        SUBSCRIPTION_STATUS.SUSPENDED,
+      reason: "Regression test suspension",
+    });
+
+    const suspended =
+      await Subscription.findById(
+        unpaidSubscription._id
+      );
+
+    if (
+      suspended.status ===
+        SUBSCRIPTION_STATUS.SUSPENDED &&
+      suspended.suspendedAt
+    ) {
+      pass(
+        "ACTIVE to SUSPENDED transition works"
+      );
+    } else {
+      fail(
+        "ACTIVE to SUSPENDED transition works",
+        new Error(
+          "Subscription was not correctly suspended"
+        )
+      );
+    }
+
+    // -----------------------------------------------------
+    // TEST 9
+    // SUSPENDED -> ACTIVE
+    // -----------------------------------------------------
+
+    await transitionSubscriptionStatus({
+      subscriptionId:
+        unpaidSubscription._id,
+      targetStatus:
+        SUBSCRIPTION_STATUS.ACTIVE,
+      reason: "Regression test resume",
+    });
+
+    const resumed =
+      await Subscription.findById(
+        unpaidSubscription._id
+      );
+
+    if (
+      resumed.status ===
+      SUBSCRIPTION_STATUS.ACTIVE
+    ) {
+      pass(
+        "SUSPENDED to ACTIVE transition works"
+      );
+    } else {
+      fail(
+        "SUSPENDED to ACTIVE transition works",
+        new Error(
+          "Subscription was not correctly resumed"
+        )
+      );
+    }
+
+    // -----------------------------------------------------
+    // TEST 10
+    // Effective subscription check
+    // -----------------------------------------------------
+
+    const effective =
+      await getEffectiveSubscription(
+        paymentInstitute._id
+      );
+
+    if (
+      effective &&
+      effective.status ===
+        SUBSCRIPTION_STATUS.ACTIVE
+    ) {
+      pass(
+        "Effective ACTIVE subscription is returned"
+      );
+    } else {
+      fail(
+        "Effective ACTIVE subscription is returned",
+        new Error(
+          "Effective subscription was not returned"
+        )
+      );
+    }
+
+    // -----------------------------------------------------
+    // TEST 11
+    // Expired subscription cannot resume
+    // -----------------------------------------------------
+
+    suspensionInstitute =
+      await createTestInstitute("EXPIRY");
+
+    const expiredSubscription =
+      await createSubscription({
+        instituteId:
+          suspensionInstitute._id,
+        plan: "BASIC",
+        amount: 999,
+        paymentRequired: true,
+        durationDays: 30,
+      });
+
+    await createPayment({
+      instituteId:
+        suspensionInstitute._id,
+      subscriptionId:
+        expiredSubscription._id,
+      status: "VERIFIED",
+    });
+
+    await activateSubscription({
+      subscriptionId:
+        expiredSubscription._id,
+    });
+
+    await Subscription.updateOne(
+      {
+        _id:
+          expiredSubscription._id,
+      },
+      {
+        $set: {
+          endDate: new Date(
+            Date.now() - 86400000
+          ),
+          status:
+            SUBSCRIPTION_STATUS.SUSPENDED,
+        },
+      }
+    );
+
+    await expectErrorCode(
+      "Expired SUSPENDED subscription cannot resume",
+      () =>
+        transitionSubscriptionStatus({
+          subscriptionId:
+            expiredSubscription._id,
+          targetStatus:
+            SUBSCRIPTION_STATUS.ACTIVE,
+        }),
+      "SUBSCRIPTION_EXPIRED"
+    );
+
+    // -----------------------------------------------------
+    // Summary
+    // -----------------------------------------------------
+
+    console.log(
+      "\n----------------------------------------"
+    );
+
+    const passed = results.filter(
+      (item) => item.status === "PASS"
+    ).length;
+
+    const failed = results.filter(
+      (item) => item.status === "FAIL"
+    ).length;
+
+    console.log(
+      `Subscription Service Regression: ${passed} PASS / ${failed} FAIL`
+    );
+
+    console.log(
+      "----------------------------------------\n"
+    );
+
+    if (failed > 0) {
+      process.exitCode = 1;
+    }
+  } catch (error) {
+    console.error(
+      "\nREGRESSION RUN FAILED:"
+    );
+    console.error(error);
+    process.exitCode = 1;
+  } finally {
+    // -----------------------------------------------------
+    // Cleanup ONLY our test institutes/data
+    // Existing project data is untouched.
+    // -----------------------------------------------------
+
+    try {
+      const testInstitutes =
+        await Institute.find({
+          name: {
+            $regex: `^${TEST_PREFIX}`,
+          },
+        }).select("_id");
+
+      const instituteIds =
+        testInstitutes.map(
+          (item) => item._id
+        );
+
+      if (instituteIds.length > 0) {
+        await Payment.deleteMany({
+          instituteId: {
+            $in: instituteIds,
+          },
+        });
+
+        await Subscription.deleteMany({
+          instituteId: {
+            $in: instituteIds,
+          },
+        });
+
+        await Institute.deleteMany({
+          _id: {
+            $in: instituteIds,
+          },
+        });
+      }
+
+      console.log(
+        "Test data cleanup completed."
+      );
+    } catch (cleanupError) {
+      console.error(
+        "Test cleanup failed:",
+        cleanupError.message
+      );
+      process.exitCode = 1;
+    }
+
+    await mongoose.disconnect();
+  }
+};
+
+run();

@@ -45,26 +45,29 @@ app.get("/", (req, res) => {
     },
   });
 });
-
 // Existing routes
 const bootstrapRoutes = require("./routes/bootstrapRoutes");
 const authRoutes = require("./routes/authRoutes");
-const testRoutes = require("./routes/testRoutes");
 const publicRegistrationRoutes = require("./routes/publicRegistrationRoutes");
 const adminInstituteRoutes = require("./routes/adminInstituteRoutes");
 const adminTeacherRoutes = require("./routes/adminTeacherRoutes");
 const teacherRoutes = require("./routes/teacherRoutes");
 const teacherAttendanceRoutes = require("./routes/teacherAttendanceRoutes");
 const subjectRoutes = require("./routes/subjectRoutes");
-
+const ownerAdminRoutes = require("./routes/ownerAdminRoutes");
+const subscriptionPlanVersionRoutes = require("./routes/subscriptionPlanVersionRoutes");
 app.use("/api/bootstrap", bootstrapRoutes);
 app.use("/api/auth", authRoutes);
-app.use("/api/test", testRoutes);
+if (["development", "test"].includes(process.env.NODE_ENV)) {
+  const testRoutes = require("./routes/testRoutes");
+  app.use("/api/test", testRoutes);
+}
 app.use("/api/public", publicRegistrationRoutes);
 app.use("/api/admin/institutes", adminInstituteRoutes);
 app.use("/api/admin/teachers", adminTeacherRoutes);
 app.use("/api/teacher", teacherRoutes);
 app.use("/api/admin/teacher-attendance", teacherAttendanceRoutes);
 app.use("/api/admin/subjects", subjectRoutes);
-
+app.use("/api/owner/admins", ownerAdminRoutes);
+app.use("/api/admin/subscription-plans", subscriptionPlanVersionRoutes);
 module.exports = app;
