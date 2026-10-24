@@ -8,16 +8,8 @@ const {
 
 const {
   getMandatoryFeatureKeys,
-} = require("./constants/featureCatalog");
-
-
-
-const {
   FEATURE_CATALOG,
 } = require("./constants/featureCatalog");
-
-
-
 
 const results = [];
 
@@ -97,21 +89,21 @@ runTest("Unknown feature is rejected", () => {
 });
 
 
-//////////////
-// runTest("Inactive feature is rejected", () => {
-//   const original = FEATURE_CATALOG.STUDENT_MANAGEMENT.isActive;
+runTest("Inactive feature is rejected", () => {
+  const feature = FEATURE_CATALOG.STUDENT_MANAGEMENT;
+  const original = feature.isActive;
 
-//   try {
-//     FEATURE_CATALOG.STUDENT_MANAGEMENT.isActive = false;
+  try {
+    feature.isActive = false;
 
-//     expectError("INACTIVE_FEATURE", () =>
-//       validateFeatures(validFeatures())
-//     );
-//   } finally {
-//     FEATURE_CATALOG.STUDENT_MANAGEMENT.isActive = original;
-//   }
-// });
-//////////////
+    expectError("INACTIVE_FEATURE", () =>
+      validateFeatures(validFeatures())
+    );
+  } finally {
+    feature.isActive = original;
+  }
+});
+
 
 runTest("Mandatory security feature cannot be disabled", () => {
   const features = validFeatures().map((item) =>
@@ -249,15 +241,32 @@ runTest("Complete valid entitlement configuration passes", () => {
   assert(result.limits.length === 3, "Limit count mismatch");
 });
 
-
-
-
-
 const {
   LIMIT_CATALOG,
   getLimitDefinition,
   isKnownLimit,
 } = require("./constants/limitCatalog");
+
+runTest("Inactive limit is rejected", () => {
+  const limit = LIMIT_CATALOG.MAX_STUDENTS;
+  const original = limit.isActive;
+  const features = validateFeatures(validFeatures());
+
+  try {
+    limit.isActive = false;
+
+    expectError("INACTIVE_LIMIT", () =>
+      validateLimits(
+        [{ key: "MAX_STUDENTS", value: 100 }],
+        features
+      )
+    );
+  } finally {
+    limit.isActive = original;
+  }
+});
+
+
 
 const {
   isKnownFeature,
