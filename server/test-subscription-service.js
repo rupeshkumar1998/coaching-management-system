@@ -242,8 +242,79 @@ const run = async () => {
       );
     }
 
-    // -----------------------------------------------------
+        // -----------------------------------------------------
     // TEST 3
+    // Trial activation is blocked for an unapproved institute
+    // -----------------------------------------------------
+
+    const unapprovedTrialInstitute =
+      await Institute.create({
+        name: `${TEST_PREFIX}TRIAL_UNAPPROVED`,
+        //code: `SUBT_TRIAL_UNAPPROVED_${Date.now()}`,
+        code: `TRUN_${Date.now()}`,
+        approvalStatus: "PENDING",
+        isActive: false,
+        subscriptionStatus: "PENDING",
+        subscriptionPlan: "FREE",
+      });
+
+    const unapprovedTrialSubscription =
+      await createSubscription({
+        instituteId: unapprovedTrialInstitute._id,
+        subscriptionType: "TRIAL",
+        plan: "PRO",
+        amount: 0,
+        paymentRequired: false,
+        durationDays: 30,
+        trialGrantedBy: trialUser._id,
+      });
+
+    await expectErrorCode(
+      "Trial activation is blocked for an unapproved institute",
+      () =>
+        activateSubscription({
+          subscriptionId:
+            unapprovedTrialSubscription._id,
+          activatedBy: trialUser._id,
+        }),
+      "INSTITUTE_NOT_ACTIVE"
+    );
+
+    const unapprovedTrialAfterAttempt =
+      await Subscription.findById(
+        unapprovedTrialSubscription._id
+      );
+
+    const unapprovedInstituteAfterAttempt =
+      await Institute.findById(
+        unapprovedTrialInstitute._id
+      );
+
+    if (
+      unapprovedTrialAfterAttempt &&
+      unapprovedTrialAfterAttempt.status ===
+        SUBSCRIPTION_STATUS.PENDING &&
+      !unapprovedTrialAfterAttempt.startDate &&
+      !unapprovedTrialAfterAttempt.endDate &&
+      !unapprovedTrialAfterAttempt.activatedAt &&
+      unapprovedInstituteAfterAttempt &&
+      unapprovedInstituteAfterAttempt.subscriptionStatus ===
+        "PENDING"
+    ) {
+      pass(
+        "Rejected trial activation leaves subscription and institute unchanged"
+      );
+    } else {
+      fail(
+        "Rejected trial activation leaves subscription and institute unchanged",
+        new Error(
+          "Activation attempt changed the trial or institute state"
+        )
+      );
+    }
+
+    // -----------------------------------------------------
+    // TEST 4
     // Paid subscription without verified payment
     // must be blocked.
     // -----------------------------------------------------
@@ -271,7 +342,7 @@ const run = async () => {
     );
 
     // -----------------------------------------------------
-    // TEST 4
+    // TEST 5
     // Verified payment allows activation
     // -----------------------------------------------------
 
@@ -310,7 +381,7 @@ const run = async () => {
     }
 
     // -----------------------------------------------------
-    // TEST 5
+    // TEST 6
     // Second ACTIVE subscription blocked
     // -----------------------------------------------------
 
@@ -343,7 +414,7 @@ const run = async () => {
     );
 
     // -----------------------------------------------------
-    // TEST 6
+    // TEST 7
     // Invalid lifecycle transition
     // PENDING -> EXPIRED
     // -----------------------------------------------------
@@ -371,7 +442,7 @@ const run = async () => {
     );
 
     // -----------------------------------------------------
-    // TEST 7
+    // TEST 8
     // Institute summary synchronization
     // -----------------------------------------------------
 
@@ -399,7 +470,7 @@ const run = async () => {
     }
 
     // -----------------------------------------------------
-    // TEST 8
+    // TEST 9
     // ACTIVE -> SUSPENDED
     // -----------------------------------------------------
 
@@ -434,7 +505,7 @@ const run = async () => {
     }
 
     // -----------------------------------------------------
-    // TEST 9
+    // TEST 11
     // SUSPENDED -> ACTIVE
     // -----------------------------------------------------
 
@@ -495,7 +566,7 @@ const run = async () => {
     }
 
     // -----------------------------------------------------
-    // TEST 11
+    // TEST 12
     // Expired subscription cannot resume
     // -----------------------------------------------------
 

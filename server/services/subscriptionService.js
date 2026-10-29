@@ -255,14 +255,38 @@ const validatePlanSnapshot = async (
         );
       }
 
-      if (!subscription.trialGrantedBy) {
-        throw createSubscriptionError(
-          "Trial subscription requires trialGrantedBy",
-          "TRIAL_GRANTER_REQUIRED"
-        );
-      }
+if (subscription.trialSource === "PLATFORM_OFFER") {
+  // Platform trials are granted through a published offer.
+  // They do not require a manual Super Admin grantor.
 
-      return logicalPlan;
+  if (
+    !subscription.platformTrialOfferId ||
+    !Number.isInteger(subscription.platformTrialOfferVersion) ||
+    subscription.platformTrialOfferVersion < 1
+  ) {
+    throw createSubscriptionError(
+      "Platform trial requires a valid offer snapshot",
+      "PLATFORM_TRIAL_SNAPSHOT_INVALID"
+    );
+  }
+
+  if (subscription.trialGrantedBy || subscription.trialReason) {
+    throw createSubscriptionError(
+      "Platform trial cannot contain manual-grant metadata",
+      "PLATFORM_TRIAL_METADATA_INVALID"
+    );
+  }
+} else {
+  // Manual grants and legacy trials require a grantor.
+  if (!subscription.trialGrantedBy) {
+    throw createSubscriptionError(
+      "Trial subscription requires trialGrantedBy",
+      "TRIAL_GRANTER_REQUIRED"
+    );
+  }
+}
+
+return logicalPlan;
     }
 
     // -----------------------------------------------------

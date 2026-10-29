@@ -261,6 +261,30 @@ const subscriptionSchema = new mongoose.Schema(
     // ---------------------------------------------------------
     // Trial Metadata
     // ---------------------------------------------------------
+        // ---------------------------------------------------------
+    // Trial Source and Platform Offer Snapshot
+    // ---------------------------------------------------------
+    trialSource: {
+      type: String,
+      enum: ["PLATFORM_OFFER", "MANUAL_GRANT"],
+      default: undefined,
+    },
+
+    platformTrialOfferId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PlatformTrialOffer",
+      default: null,
+      immutable: true,
+    },
+
+    platformTrialOfferVersion: {
+      type: Number,
+      min: 1,
+      default: null,
+      immutable: true,
+    },
+
+
     trialGrantedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -321,56 +345,104 @@ subscriptionSchema.index(
 
 
 
+
 subscriptionSchema.pre("validate", function () {
-  if (
-    this.subscriptionType === "TRIAL" &&
-    !this.trialGrantedBy
-  ) {
-    throw new Error(
-      "Trial subscription requires trialGrantedBy"
-    );
+  if (this.subscriptionType === "TRIAL") {
+    if (this.trialSource === "PLATFORM_OFFER") {
+      if (!this.platformTrialOfferId) {
+        throw new Error(
+          "Platform trial requires platformTrialOfferId"
+        );
+      }
+
+      if (
+        !Number.isInteger(this.platformTrialOfferVersion) ||
+        this.platformTrialOfferVersion < 1
+      ) {
+        throw new Error(
+          "Platform trial requires a valid offer version"
+        );
+      }
+
+      if (this.trialGrantedBy) {
+        throw new Error(
+          "Platform trial cannot have trialGrantedBy"
+        );
+      }
+
+      if (this.trialReason) {
+        throw new Error(
+          "Platform trial cannot have a manual trialReason"
+        );
+      }
+    } else if (this.trialSource === "MANUAL_GRANT") {
+      if (!this.trialGrantedBy) {
+        throw new Error(
+          "Manual trial requires trialGrantedBy"
+        );
+      }
+
+      if (
+        typeof this.trialReason !== "string" ||
+        this.trialReason.trim().length < 5
+      ) {
+        throw new Error(
+          "Manual trial requires a reason of at least 5 characters"
+        );
+      }
+
+      if (
+        this.platformTrialOfferId ||
+        (
+          this.platformTrialOfferVersion !== null &&
+          this.platformTrialOfferVersion !== undefined
+        )
+      ) {
+        throw new Error(
+          "Manual trial cannot have a platform offer snapshot"
+        );
+      }
+    } else if (
+      this.trialSource === undefined ||
+      this.trialSource === null
+    ) {
+      // Backward compatibility for historical trials
+      // that predate the trialSource field.
+      if (!this.trialGrantedBy) {
+        throw new Error(
+          "Trial subscription requires trialGrantedBy"
+        );
+      }
+    } else {
+      throw new Error("Invalid trialSource");
+    }
+
+    if (!this.durationDays || this.durationDays < 1) {
+      throw new Error(
+        "Trial subscription requires durationDays"
+      );
+    }
+
+    if (this.paymentRequired) {
+      throw new Error(
+        "Trial subscription cannot require payment"
+      );
+    }
+
+    if (this.amount !== 0) {
+      throw new Error(
+        "Trial subscription amount must be 0"
+      );
+    }
   }
 
-  if (
-    this.subscriptionType === "TRIAL" &&
-    (!this.durationDays || this.durationDays < 1)
-  ) {
-    throw new Error(
-      "Trial subscription requires durationDays"
-    );
-  }
-
-  if (
-    this.subscriptionType === "TRIAL" &&
-    this.paymentRequired
-  ) {
-    throw new Error(
-      "Trial subscription cannot require payment"
-    );
-  }
-
-  if (
-    this.subscriptionType === "TRIAL" &&
-    this.amount !== 0
-  ) {
-    throw new Error(
-      "Trial subscription amount must be 0"
-    );
-  }
-
-  if (
-    this.plan === "FREE" &&
-    this.paymentRequired
-  ) {
+  if (this.plan === "FREE" && this.paymentRequired) {
     throw new Error(
       "FREE subscription cannot require payment"
     );
   }
 
-  if (
-    this.plan === "FREE" &&
-    this.amount !== 0
-  ) {
+  if (this.plan === "FREE" && this.amount !== 0) {
     throw new Error(
       "FREE subscription amount must be 0"
     );
