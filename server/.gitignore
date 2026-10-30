@@ -24,6 +24,6 @@ cookies.txt
 
 # Temporary test / development files
 reset-admin-password-temprorry-file.js
-test-models.js
+/test-models.js
 clear
 curl
