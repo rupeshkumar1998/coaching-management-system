@@ -1071,6 +1071,25 @@ const run = async () => {
 
     // Delete only records created and tracked by this test.
     if (createdVersionIds.length > 0) {
+      ///////////////
+      const { AuditLog } = require("../../models/AuditLog");
+
+      // ... later in finally block:
+      if (createdPlanIds.length > 0) {
+        await AuditLog.collection.deleteMany({
+          planId: { $in: createdPlanIds },
+        });
+      }
+      /////////////////
+//       const { AuditLog } = require("../../models/AuditLog");
+// // ... in finally block, before deleting plans:
+// if (createdPlanIds.length > 0) {
+//   await AuditLog.collection.deleteMany({
+//     planId: { $in: createdPlanIds },
+//   });
+// }
+
+
       await SubscriptionPlanVersion.collection.deleteMany({
         _id: { $in: createdVersionIds },
       });

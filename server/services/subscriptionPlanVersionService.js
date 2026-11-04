@@ -1,7 +1,385 @@
+// const mongoose = require("mongoose");
+
+// const SubscriptionPlan = require("../models/SubscriptionPlan");
+// const SubscriptionPlanVersion = require("../models/SubscriptionPlanVersion");
+
+// const {
+//   validateEntitlementConfiguration,
+// } = require("./entitlementCatalogService");
+
+// const {
+//   validateAmount,
+//   validateCurrency,
+//   validateDurationDays,
+//   validatePaymentConfiguration,
+// } = require("../constants/commercialConfig");
+
+
+// const ALLOWED_CONFIGURATION_FIELDS = [
+//   "amount",
+//   "currency",
+//   "durationDays",
+//   "paymentRequired",
+//   "features",
+//   "limits",
+// ];
+
+// const hasOwn = (object, key) =>
+//   Object.prototype.hasOwnProperty.call(object, key);
+
+// const validateObjectId = (value, fieldName) => {
+//   if (!value || !mongoose.isValidObjectId(value)) {
+//     throw new Error(`Valid ${fieldName} is required`);
+//   }
+// };
+
+// const validateConfiguration = (configuration) => {
+//   if (
+//     !configuration ||
+//     typeof configuration !== "object" ||
+//     Array.isArray(configuration)
+//   ) {
+//     throw new Error("Configuration must be an object");
+//   }
+
+//   const unknownFields = Object.keys(configuration).filter(
+//     (field) => !ALLOWED_CONFIGURATION_FIELDS.includes(field)
+//   );
+
+//   if (unknownFields.length > 0) {
+//     throw new Error(
+//       `Unsupported configuration fields: ${unknownFields.join(", ")}`
+//     );
+//   }
+// };
+
+// const validateCommercialConfiguration = (version) => {
+//   validateAmount(version.amount);
+
+//   validateCurrency(version.currency);
+
+//   validateDurationDays(version.durationDays);
+
+//   validatePaymentConfiguration({
+//     amount: version.amount,
+//     paymentRequired: version.paymentRequired,
+//   });
+// };
+
+// const applyConfiguration = (version, configuration) => {
+//   for (const field of ALLOWED_CONFIGURATION_FIELDS) {
+//     if (hasOwn(configuration, field)) {
+//       version.set(field, configuration[field]);
+//     }
+//   }
+// };
+
+// const setLifecycleAuthorization = (version) => {
+//   version.$locals.lifecycleTransition = true;
+// };
+
+// const clearLifecycleAuthorization = (version) => {
+//   delete version.$locals.lifecycleTransition;
+// };
+
+// // --------------------------------------------------
+// // 1. CREATE DRAFT VERSION
+// // --------------------------------------------------
+
+// const createDraftPlanVersion = async ({
+//   planId,
+//   configuration,
+//   actorId,
+// }) => {
+//   validateObjectId(planId, "planId");
+//   validateObjectId(actorId, "actorId");
+//   validateConfiguration(configuration);
+
+//   const session = await mongoose.startSession();
+//   let result;
+
+//   try {
+//     await session.withTransaction(async () => {
+//       const plan = await SubscriptionPlan.findById(planId)
+//         .session(session);
+
+//       if (!plan) {
+//         throw new Error("Subscription plan not found");
+//       }
+
+//       const latestVersion = await SubscriptionPlanVersion.findOne({
+//         planId,
+//       })
+//         .sort({ version: -1 })
+//         .select("version")
+//         .session(session)
+//         .lean();
+
+//       const nextVersion = latestVersion
+//         ? latestVersion.version + 1
+//         : 1;
+
+//       const draft = new SubscriptionPlanVersion({
+//         planId,
+//         version: nextVersion,
+//         status: "DRAFT",
+//         createdBy: actorId,
+//         updatedBy: actorId,
+//       });
+
+//       applyConfiguration(draft, configuration);
+
+//       await draft.save({ session });
+
+//       result = draft;
+//     });
+
+//     return result;
+//   } finally {
+//     await session.endSession();
+//   }
+// };
+
+// // --------------------------------------------------
+// // 2. UPDATE DRAFT CONFIGURATION
+// // --------------------------------------------------
+
+// const updateDraftPlanVersion = async ({
+//   planId,
+//   versionId,
+//   configuration,
+//   actorId,
+// }) => {
+//   validateObjectId(planId, "planId");
+//   validateObjectId(versionId, "versionId");
+//   validateObjectId(actorId, "actorId");
+//   validateConfiguration(configuration);
+
+//   const session = await mongoose.startSession();
+//   let result;
+
+//   try {
+//     await session.withTransaction(async () => {
+//       const version = await SubscriptionPlanVersion.findOne({
+//         _id: versionId,
+//         planId,
+//       }).session(session);
+
+//       if (!version) {
+//         throw new Error("Plan version not found");
+//       }
+
+//       if (version.status !== "DRAFT") {
+//         throw new Error("Only DRAFT versions can be edited");
+//       }
+
+//       applyConfiguration(version, configuration);
+//       version.updatedBy = actorId;
+
+//       await version.save({ session });
+
+//       result = version;
+//     });
+
+//     return result;
+//   } finally {
+//     await session.endSession();
+//   }
+// };
+
+// // --------------------------------------------------
+// // 3. PUBLISH DRAFT VERSION
+// // --------------------------------------------------
+
+// const publishPlanVersion = async ({
+//   planId,
+//   versionId,
+//   actorId,
+// }) => {
+//   validateObjectId(planId, "planId");
+//   validateObjectId(versionId, "versionId");
+//   validateObjectId(actorId, "actorId");
+
+//   const session = await mongoose.startSession();
+//   let result;
+
+//   try {
+//     await session.withTransaction(async () => {
+//       const plan = await SubscriptionPlan.findById(planId)
+//         .session(session);
+
+//       if (!plan) {
+//         throw new Error("Subscription plan not found");
+//       }
+
+//       const version = await SubscriptionPlanVersion.findOne({
+//         _id: versionId,
+//         planId,
+//       }).session(session);
+
+//       if (!version) {
+//         throw new Error("Plan version not found");
+//       }
+
+//       if (version.status !== "DRAFT") {
+//         throw new Error("Only DRAFT versions can be published");
+//       }
+
+//       // Revalidate persisted entitlements before publishing.
+//       // This also protects against corrupted data written outside Mongoose.
+//       validateEntitlementConfiguration({
+//         features: version.features,
+//         limits: version.limits,
+//       });
+
+//       // Revalidate persisted commercial configuration before publishing.
+//       // This also protects against corrupted data written outside Mongoose.
+//       validateCommercialConfiguration(version);
+
+
+//       // Retire the previous current version first.
+//       if (plan.currentPublishedVersion) {
+//         const previousVersion =
+//           await SubscriptionPlanVersion.findOne({
+//             _id: plan.currentPublishedVersion,
+//             planId,
+//           }).session(session);
+
+//         if (
+//           !previousVersion ||
+//           previousVersion.status !== "PUBLISHED"
+//         ) {
+//           throw new Error(
+//             "Current published version pointer is inconsistent"
+//           );
+//         }
+
+//         previousVersion.status = "RETIRED";
+//         previousVersion.retiredAt = new Date();
+//         previousVersion.retiredBy = actorId;
+//         previousVersion.updatedBy = actorId;
+
+//         setLifecycleAuthorization(previousVersion);
+
+//         try {
+//           await previousVersion.save({ session });
+//         } finally {
+//           clearLifecycleAuthorization(previousVersion);
+//         }
+//       }
+
+//       // Publish the selected draft.
+//       version.status = "PUBLISHED";
+//       version.publishedAt = new Date();
+//       version.publishedBy = actorId;
+//       version.updatedBy = actorId;
+
+//       setLifecycleAuthorization(version);
+
+//       try {
+//         await version.save({ session });
+//       } finally {
+//         clearLifecycleAuthorization(version);
+//       }
+
+//       // Update the plan pointer in the same transaction.
+//       plan.currentPublishedVersion = version._id;
+//       plan.updatedBy = actorId;
+
+//       await plan.save({ session });
+
+//       result = version;
+//     });
+
+//     return result;
+//   } finally {
+//     await session.endSession();
+//   }
+// };
+
+// // --------------------------------------------------
+// // 4. RETIRE CURRENT PUBLISHED VERSION
+// // --------------------------------------------------
+
+// const retirePublishedPlanVersion = async ({
+//   planId,
+//   versionId,
+//   actorId,
+// }) => {
+//   validateObjectId(planId, "planId");
+//   validateObjectId(versionId, "versionId");
+//   validateObjectId(actorId, "actorId");
+
+//   const session = await mongoose.startSession();
+//   let result;
+
+//   try {
+//     await session.withTransaction(async () => {
+//       const plan = await SubscriptionPlan.findById(planId)
+//         .session(session);
+
+//       if (!plan) {
+//         throw new Error("Subscription plan not found");
+//       }
+
+//       if (
+//         !plan.currentPublishedVersion ||
+//         plan.currentPublishedVersion.toString() !==
+//         versionId.toString()
+//       ) {
+//         throw new Error(
+//           "Version is not the plan's current published version"
+//         );
+//       }
+
+//       const version = await SubscriptionPlanVersion.findOne({
+//         _id: versionId,
+//         planId,
+//       }).session(session);
+
+//       if (!version || version.status !== "PUBLISHED") {
+//         throw new Error("Published version not found");
+//       }
+
+//       version.status = "RETIRED";
+//       version.retiredAt = new Date();
+//       version.retiredBy = actorId;
+//       version.updatedBy = actorId;
+
+//       setLifecycleAuthorization(version);
+
+//       try {
+//         await version.save({ session });
+//       } finally {
+//         clearLifecycleAuthorization(version);
+//       }
+
+//       plan.currentPublishedVersion = null;
+//       plan.updatedBy = actorId;
+
+//       await plan.save({ session });
+
+//       result = version;
+//     });
+
+//     return result;
+//   } finally {
+//     await session.endSession();
+//   }
+// };
+
+// module.exports = {
+//   createDraftPlanVersion,
+//   updateDraftPlanVersion,
+//   publishPlanVersion,
+//   retirePublishedPlanVersion,
+// };
+
 const mongoose = require("mongoose");
 
 const SubscriptionPlan = require("../models/SubscriptionPlan");
 const SubscriptionPlanVersion = require("../models/SubscriptionPlanVersion");
+const { logPlanAction } = require("./auditLogService");
 
 const {
   validateEntitlementConfiguration,
@@ -13,7 +391,6 @@ const {
   validateDurationDays,
   validatePaymentConfiguration,
 } = require("../constants/commercialConfig");
-
 
 const ALLOWED_CONFIGURATION_FIELDS = [
   "amount",
@@ -83,6 +460,37 @@ const clearLifecycleAuthorization = (version) => {
 };
 
 // --------------------------------------------------
+// AUDIT DIFF HELPERS
+// --------------------------------------------------
+
+const normalizeFeatures = (features = []) =>
+  [...features]
+    .map((item) => ({ key: item.key, enabled: !!item.enabled }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+
+const normalizeLimits = (limits = []) =>
+  [...limits]
+    .map((item) => ({
+      key: item.key,
+      value: item.value === undefined ? null : item.value,
+    }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+
+const featuresChanged = (before, after) => {
+  return (
+    JSON.stringify(normalizeFeatures(before)) !==
+    JSON.stringify(normalizeFeatures(after))
+  );
+};
+
+const limitsChanged = (before, after) => {
+  return (
+    JSON.stringify(normalizeLimits(before)) !==
+    JSON.stringify(normalizeLimits(after))
+  );
+};
+
+// --------------------------------------------------
 // 1. CREATE DRAFT VERSION
 // --------------------------------------------------
 
@@ -100,8 +508,9 @@ const createDraftPlanVersion = async ({
 
   try {
     await session.withTransaction(async () => {
-      const plan = await SubscriptionPlan.findById(planId)
-        .session(session);
+      const plan = await SubscriptionPlan.findById(planId).session(
+        session
+      );
 
       if (!plan) {
         throw new Error("Subscription plan not found");
@@ -130,6 +539,27 @@ const createDraftPlanVersion = async ({
       applyConfiguration(draft, configuration);
 
       await draft.save({ session });
+
+      // 32.16.15.9.14 — Audit
+      await logPlanAction(
+        {
+          action: "PLAN_DRAFT_CREATED",
+          actorId,
+          planId: draft.planId,
+          planVersionId: draft._id,
+          oldValue: null,
+          newValue: {
+            version: draft.version,
+            amount: draft.amount,
+            currency: draft.currency,
+            durationDays: draft.durationDays,
+            paymentRequired: draft.paymentRequired,
+            features: normalizeFeatures(draft.features),
+            limits: normalizeLimits(draft.limits),
+          },
+        },
+        session
+      );
 
       result = draft;
     });
@@ -173,10 +603,91 @@ const updateDraftPlanVersion = async ({
         throw new Error("Only DRAFT versions can be edited");
       }
 
+      // Snapshot BEFORE applying changes.
+      const before = {
+        amount: version.amount,
+        currency: version.currency,
+        durationDays: version.durationDays,
+        paymentRequired: version.paymentRequired,
+        features: normalizeFeatures(version.features),
+        limits: normalizeLimits(version.limits),
+      };
+
       applyConfiguration(version, configuration);
       version.updatedBy = actorId;
 
       await version.save({ session });
+
+      // Snapshot AFTER save (so entitlement normalization is captured).
+      const after = {
+        amount: version.amount,
+        currency: version.currency,
+        durationDays: version.durationDays,
+        paymentRequired: version.paymentRequired,
+        features: normalizeFeatures(version.features),
+        limits: normalizeLimits(version.limits),
+      };
+
+      // Emit only the audit events that match actual changes.
+      const events = [];
+
+      if (
+        before.amount !== after.amount ||
+        before.currency !== after.currency ||
+        before.paymentRequired !== after.paymentRequired
+      ) {
+        events.push({
+          action: "PLAN_PRICE_CHANGED",
+          oldValue: {
+            amount: before.amount,
+            currency: before.currency,
+            paymentRequired: before.paymentRequired,
+          },
+          newValue: {
+            amount: after.amount,
+            currency: after.currency,
+            paymentRequired: after.paymentRequired,
+          },
+        });
+      }
+
+      if (before.durationDays !== after.durationDays) {
+        events.push({
+          action: "PLAN_DURATION_CHANGED",
+          oldValue: before.durationDays,
+          newValue: after.durationDays,
+        });
+      }
+
+      if (featuresChanged(before.features, after.features)) {
+        events.push({
+          action: "PLAN_FEATURE_CHANGED",
+          oldValue: before.features,
+          newValue: after.features,
+        });
+      }
+
+      if (limitsChanged(before.limits, after.limits)) {
+        events.push({
+          action: "PLAN_LIMIT_CHANGED",
+          oldValue: before.limits,
+          newValue: after.limits,
+        });
+      }
+
+      for (const event of events) {
+        await logPlanAction(
+          {
+            action: event.action,
+            actorId,
+            planId: version.planId,
+            planVersionId: version._id,
+            oldValue: event.oldValue,
+            newValue: event.newValue,
+          },
+          session
+        );
+      }
 
       result = version;
     });
@@ -205,8 +716,9 @@ const publishPlanVersion = async ({
 
   try {
     await session.withTransaction(async () => {
-      const plan = await SubscriptionPlan.findById(planId)
-        .session(session);
+      const plan = await SubscriptionPlan.findById(planId).session(
+        session
+      );
 
       if (!plan) {
         throw new Error("Subscription plan not found");
@@ -225,17 +737,12 @@ const publishPlanVersion = async ({
         throw new Error("Only DRAFT versions can be published");
       }
 
-      // Revalidate persisted entitlements before publishing.
-      // This also protects against corrupted data written outside Mongoose.
       validateEntitlementConfiguration({
         features: version.features,
         limits: version.limits,
       });
 
-      // Revalidate persisted commercial configuration before publishing.
-      // This also protects against corrupted data written outside Mongoose.
       validateCommercialConfiguration(version);
-
 
       // Retire the previous current version first.
       if (plan.currentPublishedVersion) {
@@ -266,6 +773,19 @@ const publishPlanVersion = async ({
         } finally {
           clearLifecycleAuthorization(previousVersion);
         }
+
+        // 32.16.15.9.14 — Audit: prior version retired
+        await logPlanAction(
+          {
+            action: "PLAN_VERSION_RETIRED",
+            actorId,
+            planId: previousVersion.planId,
+            planVersionId: previousVersion._id,
+            oldValue: { status: "PUBLISHED" },
+            newValue: { status: "RETIRED" },
+          },
+          session
+        );
       }
 
       // Publish the selected draft.
@@ -281,6 +801,27 @@ const publishPlanVersion = async ({
       } finally {
         clearLifecycleAuthorization(version);
       }
+
+      // 32.16.15.9.14 — Audit: version published
+      await logPlanAction(
+        {
+          action: "PLAN_VERSION_PUBLISHED",
+          actorId,
+          planId: version.planId,
+          planVersionId: version._id,
+          oldValue: { status: "DRAFT" },
+          newValue: {
+            status: "PUBLISHED",
+            amount: version.amount,
+            currency: version.currency,
+            durationDays: version.durationDays,
+            paymentRequired: version.paymentRequired,
+            features: normalizeFeatures(version.features),
+            limits: normalizeLimits(version.limits),
+          },
+        },
+        session
+      );
 
       // Update the plan pointer in the same transaction.
       plan.currentPublishedVersion = version._id;
@@ -315,8 +856,9 @@ const retirePublishedPlanVersion = async ({
 
   try {
     await session.withTransaction(async () => {
-      const plan = await SubscriptionPlan.findById(planId)
-        .session(session);
+      const plan = await SubscriptionPlan.findById(planId).session(
+        session
+      );
 
       if (!plan) {
         throw new Error("Subscription plan not found");
@@ -325,7 +867,7 @@ const retirePublishedPlanVersion = async ({
       if (
         !plan.currentPublishedVersion ||
         plan.currentPublishedVersion.toString() !==
-        versionId.toString()
+          versionId.toString()
       ) {
         throw new Error(
           "Version is not the plan's current published version"
@@ -353,6 +895,19 @@ const retirePublishedPlanVersion = async ({
       } finally {
         clearLifecycleAuthorization(version);
       }
+
+      // 32.16.15.9.14 — Audit
+      await logPlanAction(
+        {
+          action: "PLAN_VERSION_RETIRED",
+          actorId,
+          planId: version.planId,
+          planVersionId: version._id,
+          oldValue: { status: "PUBLISHED" },
+          newValue: { status: "RETIRED" },
+        },
+        session
+      );
 
       plan.currentPublishedVersion = null;
       plan.updatedBy = actorId;

@@ -55,7 +55,13 @@ const teacherRoutes = require("./routes/teacherRoutes");
 const teacherAttendanceRoutes = require("./routes/teacherAttendanceRoutes");
 const subjectRoutes = require("./routes/subjectRoutes");
 const ownerAdminRoutes = require("./routes/ownerAdminRoutes");
+
+const ownerSubscriptionPlanRoutes = require("./routes/ownerSubscriptionPlanRoutes");
+const instituteAdminSubscriptionPlanRoutes = require("./routes/instituteAdminSubscriptionPlanRoutes");
+
 const subscriptionPlanVersionRoutes = require("./routes/subscriptionPlanVersionRoutes");
+const auditLogRoutes = require("./routes/auditLogRoutes");
+
 app.use("/api/bootstrap", bootstrapRoutes);
 app.use("/api/auth", authRoutes);
 if (["development", "test"].includes(process.env.NODE_ENV)) {
@@ -69,5 +75,11 @@ app.use("/api/teacher", teacherRoutes);
 app.use("/api/admin/teacher-attendance", teacherAttendanceRoutes);
 app.use("/api/admin/subjects", subjectRoutes);
 app.use("/api/owner/admins", ownerAdminRoutes);
+
+app.use("/api/owner/subscription-plans", ownerSubscriptionPlanRoutes);
+app.use("/api/admin/available-subscription-plans", instituteAdminSubscriptionPlanRoutes);
+
 app.use("/api/admin/subscription-plans", subscriptionPlanVersionRoutes);
+app.use("/api/admin/audit-logs", auditLogRoutes);
+
 module.exports = app;

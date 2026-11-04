@@ -27,3 +27,13 @@ reset-admin-password-temprorry-file.js
 /test-models.js
 clear
 curl
+
+
+
+# Backup files (local only)
+*.bak
+*.backup
+my-backup/
+
+# One-off debug scripts
+check-plan-version-*.js
