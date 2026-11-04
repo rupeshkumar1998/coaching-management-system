@@ -1,7 +1,22 @@
+const mongoose = require("mongoose");
+
 const User = require("../models/User");
 const Teacher = require("../models/Teacher");
 const Institute = require("../models/Institute");
 const { hashPassword } = require("../services/authService");
+
+const validateTeacherId = (teacherId, res) => {
+  if (!mongoose.isValidObjectId(teacherId)) {
+    res.status(400).json({
+      success: false,
+      message: "Invalid teacher ID",
+    });
+
+    return false;
+  }
+
+  return true;
+};
 
 const createTeacher = async (req, res) => {
   try {
@@ -20,6 +35,24 @@ const createTeacher = async (req, res) => {
       salary,
       employmentType,
     } = req.body;
+
+
+    // Validate optional employee ID
+    if (
+      employeeId !== undefined &&
+      employeeId !== null &&
+      typeof employeeId !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee ID must be a string",
+      });
+    }
+
+    const normalizedEmployeeId =
+      typeof employeeId === "string" && employeeId.trim()
+        ? employeeId.trim().toUpperCase()
+        : null;
 
     // Required fields
     if (!name || !email || !password) {
@@ -66,10 +99,11 @@ const createTeacher = async (req, res) => {
     }
 
     // Employee ID unique within this institute
-    if (employeeId) {
+    if (normalizedEmployeeId) {
       const existingEmployee = await Teacher.findOne({
         instituteId: req.tenantId,
-        employeeId: employeeId.trim().toUpperCase(),
+        // employeeId: employeeId.trim().toUpperCase(),
+        employeeId: normalizedEmployeeId,
         isDeleted: false,
       });
 
@@ -103,9 +137,7 @@ const createTeacher = async (req, res) => {
       teacherProfile = await Teacher.create({
         userId: teacherUser._id,
         instituteId: req.tenantId,
-        employeeId: employeeId
-          ? employeeId.trim().toUpperCase()
-          : null,
+        employeeId: normalizedEmployeeId,
         qualification: qualification ? qualification.trim() : null,
         specialization: specialization
           ? specialization.trim()
@@ -201,6 +233,9 @@ const getTeachers = async (req, res) => {
 const getTeacherById = async (req, res) => {
   try {
     const { teacherId } = req.params;
+    if (!validateTeacherId(teacherId, res)) {
+      return;
+    }
 
     if (!req.tenantId) {
       return res.status(403).json({
@@ -246,6 +281,9 @@ const getTeacherById = async (req, res) => {
 const updateTeacher = async (req, res) => {
   try {
     const { teacherId } = req.params;
+    if (!validateTeacherId(teacherId, res)) {
+      return;
+    }
 
     if (!req.tenantId) {
       return res.status(403).json({
@@ -343,12 +381,50 @@ const updateTeacher = async (req, res) => {
     }
 
     // Update Teacher fields
-    if (employeeId !== undefined) {
-      const normalizedEmployeeId = employeeId
-        ? employeeId.trim().toUpperCase()
-        : null;
+    // if (employeeId !== undefined) {
+    //   const normalizedEmployeeId = employeeId
+    //     ? employeeId.trim().toUpperCase()
+    //     : null;
 
-      if (normalizedEmployeeId && normalizedEmployeeId !== teacher.employeeId) {
+    //   if (normalizedEmployeeId && normalizedEmployeeId !== teacher.employeeId) {
+    //     const existingEmployee = await Teacher.findOne({
+    //       instituteId: req.tenantId,
+    //       employeeId: normalizedEmployeeId,
+    //       isDeleted: false,
+    //       _id: { $ne: teacher._id },
+    //     });
+
+    //     if (existingEmployee) {
+    //       return res.status(409).json({
+    //         success: false,
+    //         message: "Employee ID already exists in this institute",
+    //       });
+    //     }
+    //   }
+
+    //   teacher.employeeId = normalizedEmployeeId;
+    // }
+    // Update Teacher fields
+    if (employeeId !== undefined) {
+      if (
+        employeeId !== null &&
+        typeof employeeId !== "string"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Employee ID must be a string",
+        });
+      }
+
+      const normalizedEmployeeId =
+        typeof employeeId === "string" && employeeId.trim()
+          ? employeeId.trim().toUpperCase()
+          : null;
+
+      if (
+        normalizedEmployeeId &&
+        normalizedEmployeeId !== teacher.employeeId
+      ) {
         const existingEmployee = await Teacher.findOne({
           instituteId: req.tenantId,
           employeeId: normalizedEmployeeId,
@@ -470,6 +546,9 @@ const updateTeacher = async (req, res) => {
 const toggleTeacherStatus = async (req, res) => {
   try {
     const { teacherId } = req.params;
+    if (!validateTeacherId(teacherId, res)) {
+      return;
+    }
 
     if (!req.tenantId) {
       return res.status(403).json({
@@ -541,7 +620,9 @@ const toggleTeacherStatus = async (req, res) => {
 const deleteTeacher = async (req, res) => {
   try {
     const { teacherId } = req.params;
-
+    if (!validateTeacherId(teacherId, res)) {
+      return;
+    }
     if (!req.tenantId) {
       return res.status(403).json({
         success: false,
@@ -614,6 +695,9 @@ const deleteTeacher = async (req, res) => {
 const resetTeacherPassword = async (req, res) => {
   try {
     const { teacherId } = req.params;
+    if (!validateTeacherId(teacherId, res)) {
+      return;
+    }
     const { newPassword } = req.body;
 
     // Validate password

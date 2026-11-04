@@ -97,7 +97,15 @@ const teacherSchema = new mongoose.Schema(
 );
 
 // Important for tenant isolation
-teacherSchema.index({ instituteId: 1, employeeId: 1 }, { unique: true, sparse: true });
+teacherSchema.index(
+  { instituteId: 1, employeeId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      employeeId: { $type: "string" },
+    },
+  }
+);
 
 const Teacher = mongoose.model("Teacher", teacherSchema);
 
