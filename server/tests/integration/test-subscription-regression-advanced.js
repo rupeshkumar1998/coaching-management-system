@@ -615,7 +615,10 @@ const run = async () => {
           versionInstitute._id,
       });
 
-    await Subscription.updateOne(
+      // Intentionally corrupt this test-only fixture through the
+      // native collection so activation validation can still be
+      // tested independently of the Mongoose snapshot guard.
+    await Subscription.collection.updateOne(
       {
         _id:
           versionSubscription._id,

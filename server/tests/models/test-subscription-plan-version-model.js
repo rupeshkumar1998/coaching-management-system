@@ -44,6 +44,16 @@ const validVersion = () =>
     limits: [],
   });
 
+const expectValidationFailure = async (doc) => {
+  try {
+    await doc.validate();
+  } catch (error) {
+    return;
+  }
+
+  throw new Error("Invalid configuration was accepted");
+};
+
 const getOptionalFeatureKey = () =>
   Object.keys(FEATURE_CATALOG).find(
     (key) => !FEATURE_CATALOG[key].mandatory
@@ -55,6 +65,122 @@ const getFeatureRequiredByLimit = () =>
   );
 
 (async () => {
+  // Commercial configuration validation tests.
+
+  await runTest(
+    "Amount with two decimal places is accepted",
+    async () => {
+      const doc = validVersion();
+      doc.amount = 999.50;
+      await doc.validate();
+    }
+  );
+
+  await runTest(
+    "Amount with more than two decimal places is rejected",
+    async () => {
+      const doc = validVersion();
+      doc.amount = 999.999;
+      await expectValidationFailure(doc);
+    }
+  );
+
+  await runTest(
+    "NaN amount is rejected",
+    async () => {
+      const doc = validVersion();
+      doc.amount = NaN;
+      await expectValidationFailure(doc);
+    }
+  );
+
+  await runTest(
+    "Infinite amount is rejected",
+    async () => {
+      const doc = validVersion();
+      doc.amount = Infinity;
+      await expectValidationFailure(doc);
+    }
+  );
+
+  await runTest(
+    "Currency is normalized to uppercase INR",
+    async () => {
+      const doc = validVersion();
+      doc.currency = " inr ";
+
+      await doc.validate();
+
+      if (doc.currency !== "INR") {
+        throw new Error("Currency was not normalized to INR");
+      }
+    }
+  );
+
+  await runTest(
+    "Unsupported currency is rejected",
+    async () => {
+      const doc = validVersion();
+      doc.currency = "USD";
+      await expectValidationFailure(doc);
+    }
+  );
+
+  await runTest(
+    "Null duration is accepted",
+    async () => {
+      const doc = validVersion();
+      doc.durationDays = null;
+      await doc.validate();
+    }
+  );
+
+  await runTest(
+    "Zero duration is rejected",
+    async () => {
+      const doc = validVersion();
+      doc.durationDays = 0;
+      await expectValidationFailure(doc);
+    }
+  );
+
+  await runTest(
+    "Negative duration is rejected",
+    async () => {
+      const doc = validVersion();
+      doc.durationDays = -5;
+      await expectValidationFailure(doc);
+    }
+  );
+
+  await runTest(
+    "Fractional duration is rejected",
+    async () => {
+      const doc = validVersion();
+      doc.durationDays = 2.5;
+      await expectValidationFailure(doc);
+    }
+  );
+
+  await runTest(
+    "Payment-required plan with zero amount is rejected",
+    async () => {
+      const doc = validVersion();
+      doc.amount = 0;
+      doc.paymentRequired = true;
+      await expectValidationFailure(doc);
+    }
+  );
+
+  await runTest(
+    "Non-payment plan with positive amount is rejected",
+    async () => {
+      const doc = validVersion();
+      doc.amount = 999;
+      doc.paymentRequired = false;
+      await expectValidationFailure(doc);
+    }
+  );
   await runTest(
     "Valid draft version passes validation",
     async () => {
@@ -156,7 +282,10 @@ const getFeatureRequiredByLimit = () =>
 
         const customValidationError =
           error.message &&
-          error.message.includes("amount greater than 0");
+          (
+            error.message.includes("amount greater than 0") ||
+            error.message.includes("Amount cannot be negative")
+          );
 
         if (minError || customValidationError) return;
 
@@ -283,7 +412,7 @@ const getFeatureRequiredByLimit = () =>
       //     enabled: true,
       //   },
       // ];
-            doc.features = validFeatures().map((feature) =>
+      doc.features = validFeatures().map((feature) =>
         feature.key === "STUDENT_MANAGEMENT"
           ? { ...feature, enabled: true }
           : feature
@@ -318,71 +447,145 @@ const getFeatureRequiredByLimit = () =>
     }
   );
 
+  // await runTest(
+  //   "Missing mandatory feature is rejected",
+  //   async () => {
+  //     const doc = validVersion();
+  //     const mandatoryKeys = getMandatoryFeatureKeys();
+
+  //     if (mandatoryKeys.length === 0) {
+  //       throw new Error("No mandatory features found in catalog");
+  //     }
+
+  //     const missingKey = mandatoryKeys[0];
+
+  //     doc.features = validFeatures().filter(
+  //       (feature) => feature.key !== missingKey
+  //     );
+
+  //     try {
+  //       await doc.validate();
+  //     } catch (error) {
+  //       if (
+  //         error.code === "MISSING_CORE_FEATURE" &&
+  //         error.message.includes("Mandatory core feature is missing")
+  //       ) {
+  //         return;
+  //       }
+
+  //       throw error;
+  //     }
+
+  //     throw new Error("Missing mandatory feature was accepted");
+  //   }
+  // );
+
+  // await runTest(
+  //   "Core feature cannot be disabled",
+  //   async () => {
+  //     const doc = validVersion();
+  //     const mandatoryKeys = getMandatoryFeatureKeys();
+
+  //     if (mandatoryKeys.length === 0) {
+  //       throw new Error("No mandatory features found in catalog");
+  //     }
+
+  //     const disabledKey = mandatoryKeys[0];
+
+  //     doc.features = validFeatures().map((feature) =>
+  //       feature.key === disabledKey
+  //         ? { ...feature, enabled: false }
+  //         : feature
+  //     );
+
+  //     try {
+  //       await doc.validate();
+  //     } catch (error) {
+  //       if (
+  //         error.code === "CORE_FEATURE_CANNOT_BE_DISABLED" ||
+  //         error.message.includes("cannot be disabled")
+  //       ) {
+  //         return;
+  //       }
+
+  //       throw error;
+  //     }
+
+  //     throw new Error("Disabled core feature was accepted");
+  //   }
+  // );
   await runTest(
-    "Missing mandatory feature is rejected",
+    "Every mandatory feature is required",
     async () => {
-      const doc = validVersion();
       const mandatoryKeys = getMandatoryFeatureKeys();
 
       if (mandatoryKeys.length === 0) {
         throw new Error("No mandatory features found in catalog");
       }
 
-      const missingKey = mandatoryKeys[0];
+      for (const missingKey of mandatoryKeys) {
+        const doc = validVersion();
 
-      doc.features = validFeatures().filter(
-        (feature) => feature.key !== missingKey
-      );
+        doc.features = validFeatures().filter(
+          (feature) => feature.key !== missingKey
+        );
 
-      try {
-        await doc.validate();
-      } catch (error) {
-        if (
-          error.code === "MISSING_CORE_FEATURE" &&
-          error.message.includes("Mandatory core feature is missing")
-        ) {
-          return;
+        try {
+          await doc.validate();
+        } catch (error) {
+          if (error.code === "MISSING_CORE_FEATURE") {
+            continue;
+          }
+
+          throw new Error(
+            `Unexpected error for missing ${missingKey}: ${error.message}`
+          );
         }
 
-        throw error;
+        throw new Error(
+          `Missing mandatory feature ${missingKey} was accepted`
+        );
       }
-
-      throw new Error("Missing mandatory feature was accepted");
     }
   );
 
   await runTest(
-    "Core feature cannot be disabled",
+    "Every mandatory core feature cannot be disabled",
     async () => {
-      const doc = validVersion();
       const mandatoryKeys = getMandatoryFeatureKeys();
 
       if (mandatoryKeys.length === 0) {
         throw new Error("No mandatory features found in catalog");
       }
 
-      const disabledKey = mandatoryKeys[0];
+      for (const disabledKey of mandatoryKeys) {
+        const doc = validVersion();
 
-      doc.features = validFeatures().map((feature) =>
-        feature.key === disabledKey
-          ? { ...feature, enabled: false }
-          : feature
-      );
+        doc.features = validFeatures().map((feature) =>
+          feature.key === disabledKey
+            ? { ...feature, enabled: false }
+            : feature
+        );
 
-      try {
-        await doc.validate();
-      } catch (error) {
-        if (
-          error.code === "CORE_FEATURE_CANNOT_BE_DISABLED" ||
-          error.message.includes("cannot be disabled")
-        ) {
-          return;
+        try {
+          await doc.validate();
+        } catch (error) {
+          if (
+            error.code === "CORE_FEATURE_CANNOT_BE_DISABLED" ||
+            error.message.includes("cannot be disabled")
+          ) {
+            continue;
+          }
+
+          throw new Error(
+            `Unexpected error for disabled ${disabledKey}: ${error.message}`
+          );
         }
 
-        throw error;
+        throw new Error(
+          `Disabled mandatory feature ${disabledKey} was accepted`
+        );
       }
-
-      throw new Error("Disabled core feature was accepted");
     }
   );
 

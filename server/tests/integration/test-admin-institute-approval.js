@@ -142,10 +142,10 @@ async function getPublishedTestPlan(code, amount, paymentRequired) {
 
   let version = plan.currentPublishedVersion
     ? await SubscriptionPlanVersion.findOne({
-        _id: plan.currentPublishedVersion,
-        planId: plan._id,
-        status: "PUBLISHED",
-      })
+      _id: plan.currentPublishedVersion,
+      planId: plan._id,
+      status: "PUBLISHED",
+    })
     : null;
 
   if (!version && ids.createdPlanIds.some(
@@ -245,7 +245,12 @@ async function ensureEnabledTrialOffer() {
   return savedOffer;
 }
 
-async function createInstituteFixture(label, planCode, isTrial) {
+async function createInstituteFixture(
+  label,
+  planCode,
+  isTrial,
+  forceMissingPlanVersion = false
+) {
   const suffix = `${Date.now()}_${new mongoose.Types.ObjectId()
     .toString()
     .slice(-6)}`;
@@ -277,100 +282,102 @@ async function createInstituteFixture(label, planCode, isTrial) {
   await admin.save();
   ids.userIds.push(admin._id);
 
-//   const amount = isTrial ? 0 : 999;
-//   const paymentRequired = !isTrial;
+  //   const amount = isTrial ? 0 : 999;
+  //   const paymentRequired = !isTrial;
 
-//   const { plan, version } = await getPublishedTestPlan(
-//     planCode,
-//     amount,
-//     paymentRequired
-//   );
+  //   const { plan, version } = await getPublishedTestPlan(
+  //     planCode,
+  //     amount,
+  //     paymentRequired
+  //   );
 
-//   const subscriptionData = {
-//     instituteId: institute._id,
-//     subscriptionType: isTrial ? "TRIAL" : "STANDARD",
-//     plan: plan.code,
-//     planVersion: version.version,
-//     planVersionId: version._id,
-//     amount: version.amount,
-//     currency: version.currency,
-//     paymentRequired: version.paymentRequired,
-//     durationDays: isTrial ? 14 : 30,
-//     features: version.features.map(({ key, enabled }) => ({
-//       key,
-//       enabled,
-//     })),
-//     limits: version.limits.map(({ key, value }) => ({
-//       key,
-//       value,
-//     })),
-//     status: "PENDING",
-//     startDate: null,
-//     endDate: null,
-//     activatedAt: null,
-//     activatedBy: null,
-//     autoRenew: false,
-//   };
+  //   const subscriptionData = {
+  //     instituteId: institute._id,
+  //     subscriptionType: isTrial ? "TRIAL" : "STANDARD",
+  //     plan: plan.code,
+  //     planVersion: version.version,
+  //     planVersionId: version._id,
+  //     amount: version.amount,
+  //     currency: version.currency,
+  //     paymentRequired: version.paymentRequired,
+  //     durationDays: isTrial ? 14 : 30,
+  //     features: version.features.map(({ key, enabled }) => ({
+  //       key,
+  //       enabled,
+  //     })),
+  //     limits: version.limits.map(({ key, value }) => ({
+  //       key,
+  //       value,
+  //     })),
+  //     status: "PENDING",
+  //     startDate: null,
+  //     endDate: null,
+  //     activatedAt: null,
+  //     activatedBy: null,
+  //     autoRenew: false,
+  //   };
 
-//   if (isTrial) {
-//     subscriptionData.trialSource = "PLATFORM_OFFER";
-//     subscriptionData.platformTrialOfferId =
-//       new mongoose.Types.ObjectId();
-//     subscriptionData.platformTrialOfferVersion = 1;
-//     subscriptionData.trialGrantedBy = null;
-//     subscriptionData.trialReason = null;
-//   }
+  //   if (isTrial) {
+  //     subscriptionData.trialSource = "PLATFORM_OFFER";
+  //     subscriptionData.platformTrialOfferId =
+  //       new mongoose.Types.ObjectId();
+  //     subscriptionData.platformTrialOfferVersion = 1;
+  //     subscriptionData.trialGrantedBy = null;
+  //     subscriptionData.trialReason = null;
+  //   }
 
-//   const subscription = new Subscription(subscriptionData);
-//   await subscription.save();
-//   ids.subscriptionIds.push(subscription._id);
-let subscription;
+  //   const subscription = new Subscription(subscriptionData);
+  //   await subscription.save();
+  //   ids.subscriptionIds.push(subscription._id);
+  let subscription;
 
-if (isTrial) {
-  // Create the real trial subscription and lifetime claim
-  // from the currently published, enabled platform trial offer.
-  const result = await createPlatformTrialSubscription({
-    instituteId: institute._id,
-  });
+  if (isTrial) {
+    // Create the real trial subscription and lifetime claim
+    // from the currently published, enabled platform trial offer.
+    const result = await createPlatformTrialSubscription({
+      instituteId: institute._id,
+    });
 
-  subscription = result.subscription;
-} else {
-  const { plan, version } = await getPublishedTestPlan(
-    planCode,
-    999,
-    true
-  );
+    subscription = result.subscription;
+  } else {
+    const { plan, version } = await getPublishedTestPlan(
+      planCode,
+      999,
+      true
+    );
 
-  subscription = new Subscription({
-    instituteId: institute._id,
-    subscriptionType: "STANDARD",
-    plan: plan.code,
-    planVersion: version.version,
-    planVersionId: version._id,
-    amount: version.amount,
-    currency: version.currency,
-    paymentRequired: version.paymentRequired,
-    durationDays: version.durationDays,
-    features: version.features.map(({ key, enabled }) => ({
-      key,
-      enabled,
-    })),
-    limits: version.limits.map(({ key, value }) => ({
-      key,
-      value,
-    })),
-    status: "PENDING",
-    startDate: null,
-    endDate: null,
-    activatedAt: null,
-    activatedBy: null,
-    autoRenew: false,
-  });
+    subscription = new Subscription({
+      instituteId: institute._id,
+      subscriptionType: "STANDARD",
+      plan: plan.code,
+      planVersion: version.version,
+      planVersionId: forceMissingPlanVersion
+        ? new mongoose.Types.ObjectId()
+        : version._id,
+      amount: version.amount,
+      currency: version.currency,
+      paymentRequired: version.paymentRequired,
+      durationDays: version.durationDays,
+      features: version.features.map(({ key, enabled }) => ({
+        key,
+        enabled,
+      })),
+      limits: version.limits.map(({ key, value }) => ({
+        key,
+        value,
+      })),
+      status: "PENDING",
+      startDate: null,
+      endDate: null,
+      activatedAt: null,
+      activatedBy: null,
+      autoRenew: false,
+    });
 
-  await subscription.save();
-}
+    await subscription.save();
+  }
 
-ids.subscriptionIds.push(subscription._id);
+  ids.subscriptionIds.push(subscription._id);
 
 
   let payment = null;
@@ -517,17 +524,17 @@ async function main() {
         assert.ok(subscription.endDate);
         assert.equal(subscription.paymentRequired, false);
 
-const claim = await TrialEligibilityClaim.findOne({
-  instituteId: fixture.institute._id,
-  subscriptionId: fixture.subscription._id,
-});
+        const claim = await TrialEligibilityClaim.findOne({
+          instituteId: fixture.institute._id,
+          subscriptionId: fixture.subscription._id,
+        });
 
-assert.ok(claim, "Lifetime trial claim should exist");
-assert.equal(claim.source, "PLATFORM_OFFER");
-assert.equal(
-  String(claim.platformTrialOfferId),
-  String(subscription.platformTrialOfferId)
-);
+        assert.ok(claim, "Lifetime trial claim should exist");
+        assert.equal(claim.source, "PLATFORM_OFFER");
+        assert.equal(
+          String(claim.platformTrialOfferId),
+          String(subscription.platformTrialOfferId)
+        );
 
 
         assert.equal(
@@ -634,24 +641,55 @@ assert.equal(
       }
     );
 
+    // await test(
+    //   "Activation failure rolls back institute approval and payment verification",
+    //   async () => {
+    //     const fixture = await createInstituteFixture(
+    //       "Rollback",
+    //       "BASIC",
+    //       false
+    //     );
+
+    //     // Deliberately corrupt the saved feature snapshot to force
+    //     // activateSubscription() to reject the subscription.
+    //     await Subscription.updateOne(
+    //       { _id: fixture.subscription._id },
+    //       {
+    //         $set: {
+    //           features: [{ key: "AUTHENTICATION", enabled: false }],
+    //         },
+    //       }
+    //     );
+
+    //     const response = await callApproval(fixture.institute._id);
+
+    //     assert.ok(response.statusCode >= 400);
+
+    //     const institute = await Institute.findById(
+    //       fixture.institute._id
+    //     );
+    //     const admin = await User.findById(fixture.admin._id);
+    //     const subscription = await Subscription.findById(
+    //       fixture.subscription._id
+    //     );
+    //     const payment = await Payment.findById(fixture.payment._id);
+
+    //     assert.equal(institute.approvalStatus, "PENDING");
+    //     assert.equal(institute.isActive, false);
+    //     assert.equal(admin.accountStatus, "PENDING");
+    //     assert.equal(admin.isActive, false);
+    //     assert.equal(subscription.status, "PENDING");
+    //     assert.equal(payment.status, "PENDING");
+    //   }
+    // );
     await test(
       "Activation failure rolls back institute approval and payment verification",
       async () => {
         const fixture = await createInstituteFixture(
           "Rollback",
           "BASIC",
-          false
-        );
-
-        // Deliberately corrupt the saved feature snapshot to force
-        // activateSubscription() to reject the subscription.
-        await Subscription.updateOne(
-          { _id: fixture.subscription._id },
-          {
-            $set: {
-              features: [{ key: "AUTHENTICATION", enabled: false }],
-            },
-          }
+          false,
+          true
         );
 
         const response = await callApproval(fixture.institute._id);
@@ -675,6 +713,7 @@ assert.equal(
         assert.equal(payment.status, "PENDING");
       }
     );
+
 
     await test(
       "Invalid institute ID is rejected before starting approval",
@@ -751,6 +790,6 @@ main().catch(async (error) => {
     console.error("Cleanup error:", cleanupError.message);
   });
 
-  await mongoose.disconnect().catch(() => {});
+  await mongoose.disconnect().catch(() => { });
   process.exitCode = 1;
 });

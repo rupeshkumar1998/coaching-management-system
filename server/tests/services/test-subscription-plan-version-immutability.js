@@ -190,6 +190,8 @@ const expectRejected = async (operation) => {
       "Plan version planId and version cannot be changed",
       "Plan version lifecycle transitions must use the controlled service",
       "insertOne is disabled for SubscriptionPlanVersion",
+      "Subscription plan versions cannot be deleted",
+      "Subscription plans cannot be deleted",
     ];
 
     const isExpectedError = acceptedErrors.some((message) =>
@@ -226,6 +228,63 @@ const expectVersionExists = async (id) => {
   if (!doc) {
     throw new Error("Protected plan version was deleted unexpectedly");
   }
+};
+
+// Verify that a protected logical subscription plan still exists.
+const expectPlanExists = async (id) => {
+  const doc = await SubscriptionPlan.findById(id);
+
+  if (!doc) {
+    throw new Error(
+      "Protected subscription plan was deleted unexpectedly"
+    );
+  }
+};
+
+// Verify that all supported Mongoose deletion methods are blocked.
+const expectPlanDeletionBlocked = async (plan) => {
+  const id = plan._id;
+
+  // Query-based deleteOne.
+  await expectRejected(() =>
+    SubscriptionPlan.deleteOne({ _id: id })
+  );
+
+  // Query-based deleteMany.
+  await expectRejected(() =>
+    SubscriptionPlan.deleteMany({ _id: id })
+  );
+
+  // findOneAndDelete.
+  await expectRejected(() =>
+    SubscriptionPlan.findOneAndDelete({ _id: id })
+  );
+
+  // Document-based deleteOne.
+  await expectRejected(() => plan.deleteOne());
+
+  // Confirm that the logical plan still exists.
+  await expectPlanExists(id);
+};
+
+const expectVersionDeletionBlocked = async (doc) => {
+  const id = doc._id;
+
+  await expectRejected(() =>
+    SubscriptionPlanVersion.deleteOne({ _id: id })
+  );
+
+  await expectRejected(() =>
+    SubscriptionPlanVersion.deleteMany({ _id: id })
+  );
+
+  await expectRejected(() =>
+    SubscriptionPlanVersion.findOneAndDelete({ _id: id })
+  );
+
+  await expectRejected(() => doc.deleteOne());
+
+  await expectVersionExists(id);
 };
 
 const expectDraftUnchanged = async (id) => {
@@ -345,7 +404,7 @@ const expectDraftUnchanged = async (id) => {
           SubscriptionPlanVersion.findOneAndUpdate(
             { _id: doc._id },
             { $set: { amount: 1499 } },
-            {returnDocument: "after",}
+            { returnDocument: "after", }
           )
         );
 
@@ -495,8 +554,8 @@ const expectDraftUnchanged = async (id) => {
 
     await runTest(
       "insertOne is blocked for plan versions",
-          async () => {
-          const doc = createVersion("DRAFT");
+      async () => {
+        const doc = createVersion("DRAFT");
 
         await expectRejected(() =>
           SubscriptionPlanVersion.insertOne(doc)
@@ -516,6 +575,45 @@ const expectDraftUnchanged = async (id) => {
     // ----------------------------------------------
     // G. DELETE OPERATION PROTECTION
     // ----------------------------------------------
+
+    await runTest(
+      "All deletion methods reject DRAFT version deletion",
+      async () => {
+        const doc = createVersion("DRAFT");
+
+        await doc.save();
+        createdIds.push(doc._id);
+
+        await expectVersionDeletionBlocked(doc);
+      }
+    );
+
+    await runTest(
+      "All deletion methods reject RETIRED version deletion",
+      async () => {
+        const doc = await createRetiredVersion();
+
+        await expectVersionDeletionBlocked(doc);
+      }
+    );
+
+
+    await runTest(
+      "All deletion methods reject logical subscription plan deletion",
+      async () => {
+        const version = await createPublishedVersion();
+
+        const plan = await SubscriptionPlan.findById(version.planId);
+
+        if (!plan) {
+          throw new Error(
+            "Test setup failed: subscription plan not found"
+          );
+        }
+
+        await expectPlanDeletionBlocked(plan);
+      }
+    );
 
     await runTest(
       "deleteOne rejects published version deletion",
@@ -574,177 +672,177 @@ const expectDraftUnchanged = async (id) => {
     );
 
     await runTest(
-  "Document deleteOne checks current database status",
-  async () => {
-    const doc = createVersion("DRAFT");
+      "Document deleteOne checks current database status",
+      async () => {
+        const doc = createVersion("DRAFT");
 
-    await doc.save();
-    createdIds.push(doc._id);
+        await doc.save();
+        createdIds.push(doc._id);
 
-    // Simulate another operation publishing the version
-    // after this document was loaded.
-    await SubscriptionPlanVersion.collection.updateOne(
-      { _id: doc._id },
-      {
-        $set: {
-          status: "PUBLISHED",
-          publishedAt: new Date(),
-          publishedBy: new mongoose.Types.ObjectId(),
-        },
+        // Simulate another operation publishing the version
+        // after this document was loaded.
+        await SubscriptionPlanVersion.collection.updateOne(
+          { _id: doc._id },
+          {
+            $set: {
+              status: "PUBLISHED",
+              publishedAt: new Date(),
+              publishedBy: new mongoose.Types.ObjectId(),
+            },
+          }
+        );
+
+        // The in-memory document remains stale: DRAFT.
+        if (doc.status !== "DRAFT") {
+          throw new Error(
+            "Test setup failed: document is not stale"
+          );
+        }
+
+        await expectRejected(() => doc.deleteOne());
+
+        const stored = await SubscriptionPlanVersion.findById(
+          doc._id
+        ).lean();
+
+        if (!stored) {
+          throw new Error(
+            "Published version was unexpectedly deleted"
+          );
+        }
+
+        if (stored.status !== "PUBLISHED") {
+          throw new Error(
+            "Published version status changed unexpectedly"
+          );
+        }
       }
     );
 
-    // The in-memory document remains stale: DRAFT.
-    if (doc.status !== "DRAFT") {
-      throw new Error(
-        "Test setup failed: document is not stale"
-      );
-    }
+    /////////////////
+    await runTest(
+      "updateOne cannot change planId",
+      async () => {
+        const doc = createVersion("DRAFT");
+        await doc.save();
+        createdIds.push(doc._id);
 
-    await expectRejected(() => doc.deleteOne());
+        await expectRejected(() =>
+          SubscriptionPlanVersion.updateOne(
+            { _id: doc._id },
+            {
+              $set: {
+                planId: new mongoose.Types.ObjectId(),
+              },
+            }
+          )
+        );
 
-    const stored = await SubscriptionPlanVersion.findById(
-      doc._id
-    ).lean();
+        const stored = await SubscriptionPlanVersion.findById(
+          doc._id
+        ).lean();
 
-    if (!stored) {
-      throw new Error(
-        "Published version was unexpectedly deleted"
-      );
-    }
-
-    if (stored.status !== "PUBLISHED") {
-      throw new Error(
-        "Published version status changed unexpectedly"
-      );
-    }
-  }
-);
-
-/////////////////
-await runTest(
-  "updateOne cannot change planId",
-  async () => {
-    const doc = createVersion("DRAFT");
-    await doc.save();
-    createdIds.push(doc._id);
-
-    await expectRejected(() =>
-      SubscriptionPlanVersion.updateOne(
-        { _id: doc._id },
-        {
-          $set: {
-            planId: new mongoose.Types.ObjectId(),
-          },
+        if (!stored.planId.equals(doc.planId)) {
+          throw new Error("planId changed unexpectedly");
         }
-      )
+      }
     );
 
-    const stored = await SubscriptionPlanVersion.findById(
-      doc._id
-    ).lean();
+    await runTest(
+      "updateOne cannot change version",
+      async () => {
+        const doc = createVersion("DRAFT");
+        await doc.save();
+        createdIds.push(doc._id);
 
-    if (!stored.planId.equals(doc.planId)) {
-      throw new Error("planId changed unexpectedly");
-    }
-  }
-);
+        await expectRejected(() =>
+          SubscriptionPlanVersion.updateOne(
+            { _id: doc._id },
+            {
+              $set: {
+                version: doc.version + 1,
+              },
+            }
+          )
+        );
 
-await runTest(
-  "updateOne cannot change version",
-  async () => {
-    const doc = createVersion("DRAFT");
-    await doc.save();
-    createdIds.push(doc._id);
+        const stored = await SubscriptionPlanVersion.findById(
+          doc._id
+        ).lean();
 
-    await expectRejected(() =>
-      SubscriptionPlanVersion.updateOne(
-        { _id: doc._id },
-        {
-          $set: {
-            version: doc.version + 1,
-          },
+        if (stored.version !== doc.version) {
+          throw new Error("version changed unexpectedly");
         }
-      )
+      }
+    );
+    ////////////
+    ///////----------/////////
+    await runTest(
+      "replaceOne cannot change planId",
+      async () => {
+        const doc = createVersion("DRAFT");
+        await doc.save();
+        createdIds.push(doc._id);
+
+        await expectRejected(() =>
+          SubscriptionPlanVersion.replaceOne(
+            { _id: doc._id },
+            {
+              planId: new mongoose.Types.ObjectId(),
+              version: doc.version,
+              status: "DRAFT",
+              amount: doc.amount,
+              currency: doc.currency,
+              paymentRequired: doc.paymentRequired,
+              features: doc.features,
+              limits: doc.limits,
+            }
+          )
+        );
+
+        const stored = await SubscriptionPlanVersion.findById(
+          doc._id
+        ).lean();
+
+        if (!stored.planId.equals(doc.planId)) {
+          throw new Error("replaceOne changed planId");
+        }
+      }
     );
 
-    const stored = await SubscriptionPlanVersion.findById(
-      doc._id
-    ).lean();
+    await runTest(
+      "findOneAndReplace cannot change version",
+      async () => {
+        const doc = createVersion("DRAFT");
+        await doc.save();
+        createdIds.push(doc._id);
 
-    if (stored.version !== doc.version) {
-      throw new Error("version changed unexpectedly");
-    }
-  }
-);
-////////////
-///////----------/////////
-await runTest(
-  "replaceOne cannot change planId",
-  async () => {
-    const doc = createVersion("DRAFT");
-    await doc.save();
-    createdIds.push(doc._id);
+        await expectRejected(() =>
+          SubscriptionPlanVersion.findOneAndReplace(
+            { _id: doc._id },
+            {
+              planId: doc.planId,
+              version: doc.version + 1,
+              status: "DRAFT",
+              amount: doc.amount,
+              currency: doc.currency,
+              paymentRequired: doc.paymentRequired,
+              features: doc.features,
+              limits: doc.limits,
+            }
+          )
+        );
 
-    await expectRejected(() =>
-      SubscriptionPlanVersion.replaceOne(
-        { _id: doc._id },
-        {
-          planId: new mongoose.Types.ObjectId(),
-          version: doc.version,
-          status: "DRAFT",
-          amount: doc.amount,
-          currency: doc.currency,
-          paymentRequired: doc.paymentRequired,
-          features: doc.features,
-          limits: doc.limits,
+        const stored = await SubscriptionPlanVersion.findById(
+          doc._id
+        ).lean();
+
+        if (stored.version !== doc.version) {
+          throw new Error("findOneAndReplace changed version");
         }
-      )
+      }
     );
-
-    const stored = await SubscriptionPlanVersion.findById(
-      doc._id
-    ).lean();
-
-    if (!stored.planId.equals(doc.planId)) {
-      throw new Error("replaceOne changed planId");
-    }
-  }
-);
-
-await runTest(
-  "findOneAndReplace cannot change version",
-  async () => {
-    const doc = createVersion("DRAFT");
-    await doc.save();
-    createdIds.push(doc._id);
-
-    await expectRejected(() =>
-      SubscriptionPlanVersion.findOneAndReplace(
-        { _id: doc._id },
-        {
-          planId: doc.planId,
-          version: doc.version + 1,
-          status: "DRAFT",
-          amount: doc.amount,
-          currency: doc.currency,
-          paymentRequired: doc.paymentRequired,
-          features: doc.features,
-          limits: doc.limits,
-        }
-      )
-    );
-
-    const stored = await SubscriptionPlanVersion.findById(
-      doc._id
-    ).lean();
-
-    if (stored.version !== doc.version) {
-      throw new Error("findOneAndReplace changed version");
-    }
-  }
-);
-////////////---------////////
+    ////////////---------////////
 
 
 
@@ -871,83 +969,104 @@ await runTest(
     //     await expectDraftUnchanged(doc._id);
     //   }
     // );
-//     await runTest(
-//   "Aggregation pipeline updates are rejected",
-//   async () => {
-//     const doc = createVersion("DRAFT");
+    //     await runTest(
+    //   "Aggregation pipeline updates are rejected",
+    //   async () => {
+    //     const doc = createVersion("DRAFT");
 
-//     await doc.save();
-//     createdIds.push(doc._id);
+    //     await doc.save();
+    //     createdIds.push(doc._id);
 
-//     await expectRejected(() =>
-//       SubscriptionPlanVersion.updateOne(
-//         { _id: doc._id },
-//         [{ $set: { status: "PUBLISHED" } }],
-//         { updatePipeline: true }
-//       )
-//     );
+    //     await expectRejected(() =>
+    //       SubscriptionPlanVersion.updateOne(
+    //         { _id: doc._id },
+    //         [{ $set: { status: "PUBLISHED" } }],
+    //         { updatePipeline: true }
+    //       )
+    //     );
 
-//     await expectDraftUnchanged(doc._id);
-//   }
-// );
-await runTest(
-  "Upsert is disabled for plan versions",
-  async () => {
-    await expectRejected(() =>
-      SubscriptionPlanVersion.updateOne(
-        {
-          planId: new mongoose.Types.ObjectId(),
-          version: 1,
-        },
-        {
-          $set: {
-            amount: 999,
+    //     await expectDraftUnchanged(doc._id);
+    //   }
+    // );
+    /////////////////
+    await runTest(
+      "Aggregation pipeline updates are rejected",
+      async () => {
+        const doc = createVersion("DRAFT");
+
+        await doc.save();
+        createdIds.push(doc._id);
+
+        await expectRejected(() =>
+          SubscriptionPlanVersion.updateOne(
+            { _id: doc._id },
+            [{ $set: { status: "PUBLISHED" } }],
+            { updatePipeline: true }
+          )
+        );
+
+        await expectDraftUnchanged(doc._id);
+      }
+    );
+    ////////////////
+    await runTest(
+      "Upsert is disabled for plan versions",
+      async () => {
+        await expectRejected(() =>
+          SubscriptionPlanVersion.updateOne(
+            {
+              planId: new mongoose.Types.ObjectId(),
+              version: 1,
+            },
+            {
+              $set: {
+                amount: 999,
+              },
+            },
+            {
+              upsert: true,
+            }
+          )
+        );
+
+        const upserted = await SubscriptionPlanVersion.findOne({
+          amount: 999,
+          status: "DRAFT",
+          planId: {
+            $exists: false,
           },
-        },
-        {
-          upsert: true,
+        });
+
+        if (upserted) {
+          throw new Error(
+            "Upsert unexpectedly created a plan version"
+          );
         }
-      )
+      }
     );
 
-    const upserted = await SubscriptionPlanVersion.findOne({
-      amount: 999,
-      status: "DRAFT",
-      planId: {
-        $exists: false,
-      },
-    });
+    await runTest(
+      "Query update cannot set status through $setOnInsert",
+      async () => {
+        const doc = createVersion("DRAFT");
 
-    if (upserted) {
-      throw new Error(
-        "Upsert unexpectedly created a plan version"
-      );
-    }
-  }
-);
+        await doc.save();
+        createdIds.push(doc._id);
 
-await runTest(
-  "Query update cannot set status through $setOnInsert",
-  async () => {
-    const doc = createVersion("DRAFT");
+        await expectRejected(() =>
+          SubscriptionPlanVersion.updateOne(
+            { _id: doc._id },
+            {
+              $setOnInsert: {
+                status: "PUBLISHED",
+              },
+            }
+          )
+        );
 
-    await doc.save();
-    createdIds.push(doc._id);
-
-    await expectRejected(() =>
-      SubscriptionPlanVersion.updateOne(
-        { _id: doc._id },
-        {
-          $setOnInsert: {
-            status: "PUBLISHED",
-          },
-        }
-      )
+        await expectDraftUnchanged(doc._id);
+      }
     );
-
-    await expectDraftUnchanged(doc._id);
-  }
-);
 
 
 
@@ -965,13 +1084,13 @@ await runTest(
             _id: { $in: createdIds },
           });
         }
-/////////////
+        /////////////
         if (createdPlanIds.length > 0) {
-          await SubscriptionPlan.deleteMany({
+          await SubscriptionPlan.collection.deleteMany({
             _id: { $in: createdPlanIds },
           });
         }
-///////
+        ///////
       } catch (error) {
         console.error("TEST CLEANUP ERROR:", error.message);
         process.exitCode = 1;

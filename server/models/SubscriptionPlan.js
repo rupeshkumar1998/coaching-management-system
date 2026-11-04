@@ -38,7 +38,7 @@ const subscriptionPlanSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       required: true,
-      default: true,
+      default: false,
       index: true,
     },
 
@@ -84,6 +84,43 @@ subscriptionPlanSchema.index({
   isActive: 1,
   name: 1,
 });
+
+// -------------------------------------------------------------
+// STRICT LOGICAL PLAN DELETION PROTECTION
+//
+// Logical plan identity and history must be retained.
+// No plan may be deleted through Mongoose model operations.
+// -------------------------------------------------------------
+
+const rejectSubscriptionPlanDelete = function () {
+  throw new Error(
+    "Subscription plans cannot be deleted"
+  );
+};
+
+// Query-based deletion protection.
+subscriptionPlanSchema.pre(
+  "deleteOne",
+  { query: true, document: false },
+  rejectSubscriptionPlanDelete
+);
+
+// Document-based deletion protection.
+subscriptionPlanSchema.pre(
+  "deleteOne",
+  { document: true, query: false },
+  rejectSubscriptionPlanDelete
+);
+
+subscriptionPlanSchema.pre(
+  "deleteMany",
+  rejectSubscriptionPlanDelete
+);
+
+subscriptionPlanSchema.pre(
+  "findOneAndDelete",
+  rejectSubscriptionPlanDelete
+);
 
 // Export the model.
 const SubscriptionPlan =

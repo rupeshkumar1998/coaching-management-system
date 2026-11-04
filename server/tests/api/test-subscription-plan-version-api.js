@@ -161,7 +161,13 @@ async function run() {
     console.log("Temporary API server started.");
 
     const admin = await createTestUser("SUPER_ADMIN");
+
     const owner = await createTestUser("INSTITUTE_OWNER");
+    const instituteAdmin = await createTestUser("INSTITUTE_ADMIN");
+    const teacher = await createTestUser("TEACHER");
+    const student = await createTestUser("STUDENT");
+    const parent = await createTestUser("PARENT");
+
     const plan = await createTestPlan(admin.user._id);
 
     const planPath = `${BASE_PATH}/${plan._id}/versions`;
@@ -187,16 +193,40 @@ async function run() {
       assert(result.status === 401, `Expected 401, received ${result.status}`);
     });
 
-    // 3. Authenticated non-admin.
-    await test("INSTITUTE_OWNER is denied with 403", async () => {
-      const result = await request(planPath, {
-        method: "POST",
-        token: owner.token,
-        body: { configuration: makeConfiguration() },
-      });
+    // // 3. Authenticated non-admin.
+    // await test("INSTITUTE_OWNER is denied with 403", async () => {
+    //   const result = await request(planPath, {
+    //     method: "POST",
+    //     token: owner.token,
+    //     body: { configuration: makeConfiguration() },
+    //   });
 
-      assert(result.status === 403, `Expected 403, received ${result.status}`);
-    });
+    //   assert(result.status === 403, `Expected 403, received ${result.status}`);
+    // });
+
+    // 3A. Other institute roles must not create subscription plan versions.
+    const restrictedRoles = [
+      { name: "INSTITUTE_OWNER", token: owner.token },
+      { name: "INSTITUTE_ADMIN", token: instituteAdmin.token },
+      { name: "TEACHER", token: teacher.token },
+      { name: "STUDENT", token: student.token },
+      { name: "PARENT", token: parent.token },
+    ];
+
+    for (const role of restrictedRoles) {
+      await test(`${role.name} is denied subscription plan version creation`, async () => {
+        const result = await request(planPath, {
+          method: "POST",
+          token: role.token,
+          body: { configuration: makeConfiguration() },
+        });
+
+        assert(
+          result.status === 403,
+          `Expected 403 for ${role.name}, received ${result.status}`
+        );
+      });
+    }
 
     // 4. Invalid Mongo ID.
     await test("SUPER_ADMIN invalid plan ID returns 400", async () => {
@@ -258,6 +288,24 @@ async function run() {
       const versionPath =
         `${BASE_PATH}/${plan._id}/versions/${versionId}`;
 
+      // 7A. Non-SUPER_ADMIN roles cannot update a draft.
+      for (const role of restrictedRoles) {
+        await test(`${role.name} is denied draft version update`, async () => {
+          const result = await request(versionPath, {
+            method: "PATCH",
+            token: role.token,
+            body: {
+              configuration: { amount: 1499 },
+            },
+          });
+
+          assert(
+            result.status === 403,
+            `Expected 403 for ${role.name}, received ${result.status}`
+          );
+        });
+      }
+
       // 7. Update draft.
       await test("SUPER_ADMIN updates a draft with HTTP 200", async () => {
         const result = await request(versionPath, {
@@ -273,6 +321,22 @@ async function run() {
         assert(result.data.data.amount === 1299, "Expected amount 1299");
       });
 
+
+      // 8A. Non-SUPER_ADMIN roles cannot publish a draft.
+      for (const role of restrictedRoles) {
+        await test(`${role.name} is denied draft version publishing`, async () => {
+          const result = await request(`${versionPath}/publish`, {
+            method: "POST",
+            token: role.token,
+            body: {},
+          });
+
+          assert(
+            result.status === 403,
+            `Expected 403 for ${role.name}, received ${result.status}`
+          );
+        });
+      }
       // 8. Publish draft.
       await test("SUPER_ADMIN publishes a draft with HTTP 200", async () => {
         const result = await request(`${versionPath}/publish`, {
@@ -301,6 +365,22 @@ async function run() {
 
         assert(result.status === 409, `Expected 409, received ${result.status}`);
       });
+
+      // 10A. Non-SUPER_ADMIN roles cannot retire a published version.
+      for (const role of restrictedRoles) {
+        await test(`${role.name} is denied published version retirement`, async () => {
+          const result = await request(`${versionPath}/retire`, {
+            method: "POST",
+            token: role.token,
+            body: {},
+          });
+
+          assert(
+            result.status === 403,
+            `Expected 403 for ${role.name}, received ${result.status}`
+          );
+        });
+      }
 
       // 10. Retire published version.
       await test("SUPER_ADMIN retires a published version", async () => {

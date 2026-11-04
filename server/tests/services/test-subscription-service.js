@@ -7,10 +7,23 @@ const Subscription = require("../../models/Subscription");
 const Payment = require("../../models/Payment");
 const User = require("../../models/User");
 
+const SubscriptionPlan = require("../../models/SubscriptionPlan");
+const SubscriptionPlanVersion = require("../../models/SubscriptionPlanVersion");
+
+const {
+  createDraftPlanVersion,
+  publishPlanVersion,
+} = require("../../services/subscriptionPlanVersionService");
+
+const {
+  getMandatoryFeatureKeys,
+} = require("../../constants/featureCatalog");
+
 const {
   activateSubscription,
   transitionSubscriptionStatus,
   getEffectiveSubscription,
+  validatePlanSnapshot
 } = require("../../services/subscriptionService");
 
 const {
@@ -21,6 +34,10 @@ const {
 const TEST_PREFIX = "SUB_SERVICE_TEST_";
 
 const results = [];
+
+const createdPlanIds = [];
+const createdVersionIds = [];
+const createdSubscriptionIds = [];
 
 const pass = (name) => {
   results.push({
@@ -72,7 +89,7 @@ const expectErrorCode = async (
 const createTestInstitute = async (suffix) => {
   return Institute.create({
     name: `${TEST_PREFIX}${suffix}`,
- //   code: `${TEST_PREFIX}${suffix}_${Date.now()}`,
+    //   code: `${TEST_PREFIX}${suffix}_${Date.now()}`,
     code: `SUBT_${suffix}_${Date.now()}`,
     approvalStatus: "APPROVED",
     isActive: true,
@@ -127,6 +144,52 @@ const createPayment = async ({
   });
 };
 
+const makePlanVersionConfiguration = (overrides = {}) => ({
+  amount: 999,
+  currency: "INR",
+  durationDays: 30,
+  paymentRequired: true,
+  features: getMandatoryFeatureKeys().map((key) => ({
+    key,
+    enabled: true,
+  })),
+  limits: [],
+  ...overrides,
+});
+
+const createHistoricalTestPlan = async () => {
+  const actorId = new mongoose.Types.ObjectId();
+
+  const plan = await SubscriptionPlan.create({
+    code: "BASIC",
+    name: `${TEST_PREFIX}HISTORICAL_BASIC`,
+    description: "Historical snapshot regression test",
+    isActive: true,
+    createdBy: actorId,
+    updatedBy: actorId,
+  });
+
+  createdPlanIds.push(plan._id);
+
+  return { plan, actorId };
+};
+
+const createHistoricalDraft = async (
+  planId,
+  actorId,
+  configuration
+) => {
+  const draft = await createDraftPlanVersion({
+    planId,
+    actorId,
+    configuration,
+  });
+
+  createdVersionIds.push(draft._id);
+
+  return draft;
+};
+
 const run = async () => {
   let testInstitute = null;
   let trialInstitute = null;
@@ -134,11 +197,200 @@ const run = async () => {
   let suspensionInstitute = null;
 
   try {
-  await connectTestDB();
+    await connectTestDB();
 
     console.log(
       "\nConnected to MongoDB for subscription service regression.\n"
     );
+
+    // -----------------------------------------------------
+    // HISTORICAL SNAPSHOT REGRESSION
+    // Existing subscription must remain valid after its
+    // referenced published version becomes RETIRED.
+    // -----------------------------------------------------
+
+    await (async () => {
+      const testName =
+        "Existing subscription remains valid against its retired plan version";
+
+      try {
+        const { plan, actorId } =
+          await createHistoricalTestPlan();
+
+        // Publish version 1.
+        const firstDraft =
+          await createHistoricalDraft(
+            plan._id,
+            actorId,
+            makePlanVersionConfiguration({
+              amount: 999,
+            })
+          );
+
+        const firstPublished =
+          await publishPlanVersion({
+            planId: plan._id,
+            versionId: firstDraft._id,
+            actorId,
+          });
+
+        // Create an institute for this subscription.
+        const historicalInstitute =
+          await createTestInstitute("HISTORICAL");
+
+        // Capture the exact version 1 snapshot.
+        const historicalSubscription =
+          await Subscription.create({
+            instituteId: historicalInstitute._id,
+            subscriptionType: "STANDARD",
+            plan: "BASIC",
+            planVersion: firstPublished.version,
+            planVersionId: firstPublished._id,
+            amount: firstPublished.amount,
+            currency: firstPublished.currency,
+            paymentRequired: firstPublished.paymentRequired,
+            durationDays: firstPublished.durationDays,
+            features: firstPublished.features,
+            limits: firstPublished.limits,
+            status: SUBSCRIPTION_STATUS.PENDING,
+            autoRenew: false,
+          });
+
+        createdSubscriptionIds.push(
+          historicalSubscription._id
+        );
+
+        // Publish version 2 with a different price.
+        const secondDraft =
+          await createHistoricalDraft(
+            plan._id,
+            actorId,
+            makePlanVersionConfiguration({
+              amount: 1499,
+            })
+          );
+
+        await publishPlanVersion({
+          planId: plan._id,
+          versionId: secondDraft._id,
+          actorId,
+        });
+
+        // Reload all relevant records.
+        const storedFirstVersion =
+          await SubscriptionPlanVersion.findById(
+            firstPublished._id
+          );
+
+        const storedSecondVersion =
+          await SubscriptionPlanVersion.findById(
+            secondDraft._id
+          );
+
+        const storedSubscription =
+          await Subscription.findById(
+            historicalSubscription._id
+          );
+
+        // Version 1 must now be RETIRED.
+        if (storedFirstVersion.status !== "RETIRED") {
+          throw new Error(
+            "Version 1 was not retired after publishing version 2"
+          );
+        }
+
+        if (storedSecondVersion.status !== "PUBLISHED") {
+          throw new Error(
+            "Version 2 is not PUBLISHED"
+          );
+        }
+
+        // Existing subscription must still reference version 1.
+        if (
+          storedSubscription.planVersionId.toString() !==
+          storedFirstVersion._id.toString()
+        ) {
+          throw new Error(
+            "Existing subscription reference changed"
+          );
+        }
+
+        // Validate the historical snapshot.
+        const validatedPlan =
+          await validatePlanSnapshot(
+            storedSubscription
+          );
+
+        if (
+          validatedPlan._id.toString() !==
+          plan._id.toString()
+        ) {
+          throw new Error(
+            "Historical subscription resolved to the wrong logical plan"
+          );
+        }
+
+        // Verify commercial snapshot did not change.
+        if (
+          storedSubscription.amount !== 999 ||
+          storedSubscription.currency !== "INR" ||
+          storedSubscription.paymentRequired !== true ||
+          storedSubscription.durationDays !== 30 ||
+          storedSubscription.planVersion !== 1
+        ) {
+          throw new Error(
+            "Historical commercial snapshot changed"
+          );
+        }
+
+        // Verify entitlement snapshot remains unchanged.
+        const normalizedFeatures = (items = []) =>
+          items
+            .map(({ key, enabled }) => ({
+              key,
+              enabled,
+            }))
+            .sort((a, b) => a.key.localeCompare(b.key));
+
+        const normalizedLimits = (items = []) =>
+          items
+            .map(({ key, value }) => ({
+              key,
+              value: value ?? null,
+            }))
+            .sort((a, b) => a.key.localeCompare(b.key));
+
+        if (
+          JSON.stringify(
+            normalizedFeatures(storedSubscription.features)
+          ) !==
+          JSON.stringify(
+            normalizedFeatures(firstPublished.features)
+          )
+        ) {
+          throw new Error(
+            "Historical feature snapshot changed"
+          );
+        }
+
+        if (
+          JSON.stringify(
+            normalizedLimits(storedSubscription.limits)
+          ) !==
+          JSON.stringify(
+            normalizedLimits(firstPublished.limits)
+          )
+        ) {
+          throw new Error(
+            "Historical limit snapshot changed"
+          );
+        }
+
+        pass(testName);
+      } catch (error) {
+        fail(testName, error);
+      }
+    })();
 
     // -----------------------------------------------------
     // TEST 1
@@ -169,7 +421,7 @@ const run = async () => {
 
     if (
       freeActivated.status ===
-        SUBSCRIPTION_STATUS.ACTIVE &&
+      SUBSCRIPTION_STATUS.ACTIVE &&
       freeActivated.startDate &&
       freeActivated.endDate === null
     ) {
@@ -227,7 +479,7 @@ const run = async () => {
 
     if (
       trialActivated.status ===
-        SUBSCRIPTION_STATUS.ACTIVE &&
+      SUBSCRIPTION_STATUS.ACTIVE &&
       trialActivated.startDate &&
       trialActivated.endDate
     ) {
@@ -241,7 +493,7 @@ const run = async () => {
       );
     }
 
-        // -----------------------------------------------------
+    // -----------------------------------------------------
     // TEST 3
     // Trial activation is blocked for an unapproved institute
     // -----------------------------------------------------
@@ -292,13 +544,13 @@ const run = async () => {
     if (
       unapprovedTrialAfterAttempt &&
       unapprovedTrialAfterAttempt.status ===
-        SUBSCRIPTION_STATUS.PENDING &&
+      SUBSCRIPTION_STATUS.PENDING &&
       !unapprovedTrialAfterAttempt.startDate &&
       !unapprovedTrialAfterAttempt.endDate &&
       !unapprovedTrialAfterAttempt.activatedAt &&
       unapprovedInstituteAfterAttempt &&
       unapprovedInstituteAfterAttempt.subscriptionStatus ===
-        "PENDING"
+      "PENDING"
     ) {
       pass(
         "Rejected trial activation leaves subscription and institute unchanged"
@@ -452,9 +704,9 @@ const run = async () => {
 
     if (
       instituteAfterActivation.subscriptionPlan ===
-        "BASIC" &&
+      "BASIC" &&
       instituteAfterActivation.subscriptionStatus ===
-        "ACTIVE"
+      "ACTIVE"
     ) {
       pass(
         "Institute subscription summary is synchronized"
@@ -488,7 +740,7 @@ const run = async () => {
 
     if (
       suspended.status ===
-        SUBSCRIPTION_STATUS.SUSPENDED &&
+      SUBSCRIPTION_STATUS.SUSPENDED &&
       suspended.suspendedAt
     ) {
       pass(
@@ -550,7 +802,7 @@ const run = async () => {
     if (
       effective &&
       effective.status ===
-        SUBSCRIPTION_STATUS.ACTIVE
+      SUBSCRIPTION_STATUS.ACTIVE
     ) {
       pass(
         "Effective ACTIVE subscription is returned"
@@ -694,6 +946,32 @@ const run = async () => {
           },
         });
       }
+
+
+      if (createdSubscriptionIds.length > 0) {
+        await Subscription.deleteMany({
+          _id: {
+            $in: createdSubscriptionIds,
+          },
+        });
+      }
+
+      if (createdVersionIds.length > 0) {
+        await SubscriptionPlanVersion.collection.deleteMany({
+          _id: {
+            $in: createdVersionIds,
+          },
+        });
+      }
+
+      if (createdPlanIds.length > 0) {
+        await SubscriptionPlan.collection.deleteMany({
+          _id: {
+            $in: createdPlanIds,
+          },
+        });
+      }
+
 
       console.log(
         "Test data cleanup completed."

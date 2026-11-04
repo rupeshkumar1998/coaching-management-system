@@ -7,6 +7,13 @@ const {
   validateEntitlementConfiguration,
 } = require("./entitlementCatalogService");
 
+const {
+  validateAmount,
+  validateCurrency,
+  validateDurationDays,
+  validatePaymentConfiguration,
+} = require("../constants/commercialConfig");
+
 
 const ALLOWED_CONFIGURATION_FIELDS = [
   "amount",
@@ -44,6 +51,19 @@ const validateConfiguration = (configuration) => {
       `Unsupported configuration fields: ${unknownFields.join(", ")}`
     );
   }
+};
+
+const validateCommercialConfiguration = (version) => {
+  validateAmount(version.amount);
+
+  validateCurrency(version.currency);
+
+  validateDurationDays(version.durationDays);
+
+  validatePaymentConfiguration({
+    amount: version.amount,
+    paymentRequired: version.paymentRequired,
+  });
 };
 
 const applyConfiguration = (version, configuration) => {
@@ -99,15 +119,15 @@ const createDraftPlanVersion = async ({
         ? latestVersion.version + 1
         : 1;
 
-const draft = new SubscriptionPlanVersion({
-  planId,
-  version: nextVersion,
-  status: "DRAFT",
-  createdBy: actorId,
-  updatedBy: actorId,
-});
+      const draft = new SubscriptionPlanVersion({
+        planId,
+        version: nextVersion,
+        status: "DRAFT",
+        createdBy: actorId,
+        updatedBy: actorId,
+      });
 
-applyConfiguration(draft, configuration);
+      applyConfiguration(draft, configuration);
 
       await draft.save({ session });
 
@@ -206,11 +226,15 @@ const publishPlanVersion = async ({
       }
 
       // Revalidate persisted entitlements before publishing.
-// This also protects against corrupted data written outside Mongoose.
-validateEntitlementConfiguration({
-  features: version.features,
-  limits: version.limits,
-});
+      // This also protects against corrupted data written outside Mongoose.
+      validateEntitlementConfiguration({
+        features: version.features,
+        limits: version.limits,
+      });
+
+      // Revalidate persisted commercial configuration before publishing.
+      // This also protects against corrupted data written outside Mongoose.
+      validateCommercialConfiguration(version);
 
 
       // Retire the previous current version first.
@@ -301,7 +325,7 @@ const retirePublishedPlanVersion = async ({
       if (
         !plan.currentPublishedVersion ||
         plan.currentPublishedVersion.toString() !==
-          versionId.toString()
+        versionId.toString()
       ) {
         throw new Error(
           "Version is not the plan's current published version"

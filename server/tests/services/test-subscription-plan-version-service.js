@@ -16,6 +16,10 @@ const {
 
 const { getMandatoryFeatureKeys } = require("../../constants/featureCatalog");
 
+const {
+  LIMIT_CATALOG,
+} = require("../../constants/limitCatalog");
+
 const createdPlanIds = [];
 const createdVersionIds = [];
 
@@ -74,6 +78,12 @@ const makeConfiguration = (overrides = {}) => ({
   ...overrides,
 });
 
+const getTestableLimitDependencies = () => {
+  return Object.values(LIMIT_CATALOG).filter((limit) =>
+    getMandatoryFeatureKeys().includes(limit.requiredFeature) === false
+  );
+};
+
 const createPlan = async () => {
   const actorId = new mongoose.Types.ObjectId();
 
@@ -104,7 +114,7 @@ const createDraft = async (planId, actorId, configuration) => {
 };
 
 const run = async () => {
-await connectTestDB();
+  await connectTestDB();
   try {
     // 1. Create first draft
     await test("Create first draft with version number 1", async () => {
@@ -184,13 +194,13 @@ await connectTestDB();
 
 
       console.log(
-  "  Concurrent request outcomes:",
-  results.map((result) =>
-    result.status === "fulfilled"
-      ? "SUCCESS"
-      : `FAILED: ${result.reason.message}`
-  )
-);
+        "  Concurrent request outcomes:",
+        results.map((result) =>
+          result.status === "fulfilled"
+            ? "SUCCESS"
+            : `FAILED: ${result.reason.message}`
+        )
+      );
 
 
       assert(
@@ -379,10 +389,115 @@ await connectTestDB();
 
       assert(
         storedPlan.currentPublishedVersion.toString() ===
-          published._id.toString(),
+        published._id.toString(),
         "Plan pointer should reference the published version"
       );
     });
+
+    // 12. Publish replacement version and verify complete lifecycle
+    await test(
+      "Publish replacement version and retire previous published version",
+      async () => {
+        const { plan, actorId } = await createPlan();
+
+        // Create and publish the first version.
+        const firstDraft = await createDraft(
+          plan._id,
+          actorId,
+          makeConfiguration()
+        );
+
+        const firstPublished = await publishPlanVersion({
+          planId: plan._id,
+          versionId: firstDraft._id,
+          actorId,
+        });
+
+        assert(
+          firstPublished.status === "PUBLISHED",
+          "First version should initially be PUBLISHED"
+        );
+
+        // Create a second draft.
+        const secondDraft = await createDraft(
+          plan._id,
+          actorId,
+          makeConfiguration()
+        );
+
+        // Publish the second version, replacing the first.
+        const secondPublished = await publishPlanVersion({
+          planId: plan._id,
+          versionId: secondDraft._id,
+          actorId,
+        });
+
+        // Reload both versions and the plan from the database.
+        const storedFirstVersion =
+          await SubscriptionPlanVersion.findById(firstDraft._id);
+
+        const storedSecondVersion =
+          await SubscriptionPlanVersion.findById(secondDraft._id);
+
+        const storedPlan = await SubscriptionPlan.findById(plan._id);
+
+        // Verify previous version retirement.
+        assert(
+          storedFirstVersion.status === "RETIRED",
+          "Previous published version must become RETIRED"
+        );
+
+        assert(
+          storedFirstVersion.retiredAt,
+          "Previous version must have retiredAt"
+        );
+
+        assert(
+          storedFirstVersion.retiredBy.toString() === actorId.toString(),
+          "Previous version must record the retiring actor"
+        );
+
+        // Verify replacement publication.
+        assert(
+          secondPublished.status === "PUBLISHED",
+          "Replacement version should be PUBLISHED"
+        );
+
+        assert(
+          storedSecondVersion.status === "PUBLISHED",
+          "Replacement version must be stored as PUBLISHED"
+        );
+
+        assert(
+          storedSecondVersion.publishedAt,
+          "Replacement version must have publishedAt"
+        );
+
+        assert(
+          storedSecondVersion.publishedBy.toString() === actorId.toString(),
+          "Replacement version must record the publishing actor"
+        );
+
+        // Verify the current published version pointer.
+        assert(
+          storedPlan.currentPublishedVersion.toString() ===
+          secondDraft._id.toString(),
+          "Plan pointer must reference the replacement version"
+        );
+
+        // Verify exactly one published version exists for this plan.
+        const publishedCount =
+          await SubscriptionPlanVersion.countDocuments({
+            planId: plan._id,
+            status: "PUBLISHED",
+          });
+
+        assert(
+          publishedCount === 1,
+          "Plan must have exactly one PUBLISHED version"
+        );
+      }
+    );
 
     // 12. Retire current published version
     await test("Retire current published version and clear pointer", async () => {
@@ -420,28 +535,111 @@ await connectTestDB();
 
 
 
-    // 13. Reject draft creation with a missing mandatory feature
-    await test("Reject draft creation with missing mandatory feature", async () => {
-      const { plan, actorId } = await createPlan();
+    // // 13. Reject draft creation with a missing mandatory feature
+    // await test("Reject draft creation with missing mandatory feature", async () => {
+    //   const { plan, actorId } = await createPlan();
 
-      const features = getMandatoryFeatureKeys()
-        .filter((key) => key !== "AUTHENTICATION")
-        .map((key) => ({ key, enabled: true }));
+    //   const features = getMandatoryFeatureKeys()
+    //     .filter((key) => key !== "AUTHENTICATION")
+    //     .map((key) => ({ key, enabled: true }));
 
-      await expectReject(() =>
-        createDraft(
-          plan._id,
-          actorId,
-          makeConfiguration({ features })
-        )
-      );
+    //   await expectReject(() =>
+    //     createDraft(
+    //       plan._id,
+    //       actorId,
+    //       makeConfiguration({ features })
+    //     )
+    //   );
 
-      const count = await SubscriptionPlanVersion.countDocuments({
-        planId: plan._id,
-      });
+    //   const count = await SubscriptionPlanVersion.countDocuments({
+    //     planId: plan._id,
+    //   });
 
-      assert(count === 0, "Invalid draft must not be persisted");
-    });
+    //   assert(count === 0, "Invalid draft must not be persisted");
+    // });
+    // 13. Reject draft creation when any mandatory feature is missing
+    await test(
+      "Reject draft creation with every mandatory feature missing individually",
+      async () => {
+        const mandatoryKeys = getMandatoryFeatureKeys();
+
+        if (mandatoryKeys.length === 0) {
+          throw new Error("No mandatory features found in catalog");
+        }
+
+        for (const missingKey of mandatoryKeys) {
+          const { plan, actorId } = await createPlan();
+
+          const features = mandatoryKeys
+            .filter((key) => key !== missingKey)
+            .map((key) => ({ key, enabled: true }));
+
+          await expectReject(() =>
+            createDraft(
+              plan._id,
+              actorId,
+              makeConfiguration({ features })
+            )
+          );
+
+          const count = await SubscriptionPlanVersion.countDocuments({
+            planId: plan._id,
+          });
+
+          assert(
+            count === 0,
+            `Invalid draft missing ${missingKey} must not be persisted`
+          );
+        }
+      }
+    );
+
+    // Reject draft creation when a limit's required feature is disabled.
+    await test(
+      "Reject draft creation when a limit's required feature is disabled",
+      async () => {
+        const dependencies = getTestableLimitDependencies();
+
+        if (dependencies.length === 0) {
+          throw new Error("No testable limit dependencies found");
+        }
+
+        for (const limit of dependencies) {
+          const { plan, actorId } = await createPlan();
+
+          const features = [
+            ...getMandatoryFeatureKeys().map((key) => ({
+              key,
+              enabled: true,
+            })),
+            {
+              key: limit.requiredFeature,
+              enabled: false,
+            },
+          ];
+
+          await expectReject(() =>
+            createDraft(
+              plan._id,
+              actorId,
+              makeConfiguration({
+                features,
+                limits: [{ key: limit.key, value: 10 }],
+              })
+            )
+          );
+
+          const count = await SubscriptionPlanVersion.countDocuments({
+            planId: plan._id,
+          });
+
+          assert(
+            count === 0,
+            `Invalid draft with ${limit.key} must not be persisted`
+          );
+        }
+      }
+    );
 
     // 14. Reject update that disables a feature required by a limit
     await test("Reject update that disables a required feature", async () => {
@@ -526,6 +724,106 @@ await connectTestDB();
       );
     });
 
+    // Reject raw database corruption of feature-limit dependencies.
+    await test(
+      "Reject publishing when stored limit dependencies are corrupted",
+      async () => {
+        const dependencies = getTestableLimitDependencies();
+
+        if (dependencies.length === 0) {
+          throw new Error("No testable limit dependencies found");
+        }
+
+        for (const limit of dependencies) {
+          const { plan, actorId } = await createPlan();
+
+          const features = [
+            ...getMandatoryFeatureKeys().map((key) => ({
+              key,
+              enabled: true,
+            })),
+            {
+              key: limit.requiredFeature,
+              enabled: true,
+            },
+          ];
+
+          // Publish a valid version first.
+          const firstDraft = await createDraft(
+            plan._id,
+            actorId,
+            makeConfiguration({
+              features,
+              limits: [{ key: limit.key, value: 10 }],
+            })
+          );
+
+          await publishPlanVersion({
+            planId: plan._id,
+            versionId: firstDraft._id,
+            actorId,
+          });
+
+          const secondDraft = await createDraft(
+            plan._id,
+            actorId,
+            makeConfiguration({
+              features,
+              limits: [{ key: limit.key, value: 10 }],
+            })
+          );
+
+          // Bypass Mongoose to simulate corrupted persisted data.
+          await SubscriptionPlanVersion.collection.updateOne(
+            { _id: secondDraft._id },
+            {
+              $set: {
+                features: features.map((feature) =>
+                  feature.key === limit.requiredFeature
+                    ? { ...feature, enabled: false }
+                    : feature
+                ),
+              },
+            }
+          );
+
+          await expectReject(() =>
+            publishPlanVersion({
+              planId: plan._id,
+              versionId: secondDraft._id,
+              actorId,
+            })
+          );
+
+          const storedDraft = await SubscriptionPlanVersion.findById(
+            secondDraft._id
+          );
+
+          const storedFirstDraft = await SubscriptionPlanVersion.findById(
+            firstDraft._id
+          );
+
+          const storedPlan = await SubscriptionPlan.findById(plan._id);
+
+          assert(
+            storedDraft.status === "DRAFT",
+            `${limit.key}: corrupted draft must remain DRAFT`
+          );
+
+          assert(
+            storedFirstDraft.status === "PUBLISHED",
+            `${limit.key}: previous version must remain PUBLISHED`
+          );
+
+          assert(
+            storedPlan.currentPublishedVersion.toString() ===
+            firstDraft._id.toString(),
+            `${limit.key}: existing published pointer must remain unchanged`
+          );
+        }
+      }
+    );
+
     // 16. Revalidate entitlements before publishing
     await test("Reject publishing a draft with invalid stored entitlements", async () => {
       const { plan, actorId } = await createPlan();
@@ -571,8 +869,180 @@ await connectTestDB();
       );
     });
 
+    // 17. Reject raw database corruption of mandatory core features.
+    await test(
+      "Reject publishing when a mandatory core feature is disabled or missing in stored data",
+      async () => {
+        const mandatoryKeys = getMandatoryFeatureKeys();
+
+        if (mandatoryKeys.length === 0) {
+          throw new Error("No mandatory features found in catalog");
+        }
+
+        const corruptionCases = [
+          {
+            name: "disabled mandatory feature",
+            corruptFeatures: (features, key) =>
+              features.map((feature) =>
+                feature.key === key
+                  ? { ...feature, enabled: false }
+                  : feature
+              ),
+          },
+          {
+            name: "missing mandatory feature",
+            corruptFeatures: (features, key) =>
+              features.filter((feature) => feature.key !== key),
+          },
+        ];
+
+        for (const corruptionCase of corruptionCases) {
+          for (const mandatoryKey of mandatoryKeys) {
+            const { plan, actorId } = await createPlan();
+
+            // First publish a valid version.
+            const firstDraft = await createDraft(
+              plan._id,
+              actorId,
+              makeConfiguration()
+            );
+
+            await publishPlanVersion({
+              planId: plan._id,
+              versionId: firstDraft._id,
+              actorId,
+            });
+
+            const publishedPointer = firstDraft._id.toString();
+
+            // Create a second draft, then corrupt it outside Mongoose.
+            const secondDraft = await createDraft(
+              plan._id,
+              actorId,
+              makeConfiguration()
+            );
+
+            const corruptedFeatures =
+              corruptionCase.corruptFeatures(
+                makeConfiguration().features,
+                mandatoryKey
+              );
+
+            await SubscriptionPlanVersion.collection.updateOne(
+              { _id: secondDraft._id },
+              {
+                $set: {
+                  features: corruptedFeatures,
+                },
+              }
+            );
+
+            await expectReject(() =>
+              publishPlanVersion({
+                planId: plan._id,
+                versionId: secondDraft._id,
+                actorId,
+              })
+            );
+
+            const storedDraft = await SubscriptionPlanVersion.findById(
+              secondDraft._id
+            );
+
+            const storedPublishedVersion =
+              await SubscriptionPlanVersion.findById(firstDraft._id);
+
+            const storedPlan = await SubscriptionPlan.findById(plan._id);
+
+            assert(
+              storedDraft.status === "DRAFT",
+              `Corrupted draft must remain DRAFT: ${corruptionCase.name}, ${mandatoryKey}`
+            );
+
+            assert(
+              storedPublishedVersion.status === "PUBLISHED",
+              `Existing published version must remain PUBLISHED: ${corruptionCase.name}, ${mandatoryKey}`
+            );
+
+            assert(
+              storedPlan.currentPublishedVersion.toString() ===
+              publishedPointer,
+              `Existing published pointer must remain unchanged: ${corruptionCase.name}, ${mandatoryKey}`
+            );
+          }
+        }
+      }
+    );
 
 
+    // Revalidate commercial configuration before publishing.
+    await test(
+      "Reject publishing drafts with invalid stored commercial configuration",
+      async () => {
+        const invalidConfigurations = [
+          {
+            name: "negative amount",
+            changes: { amount: -1 },
+          },
+          {
+            name: "unsupported currency",
+            changes: { currency: "USD" },
+          },
+          {
+            name: "invalid duration",
+            changes: { durationDays: 0 },
+          },
+          {
+            name: "invalid payment configuration",
+            changes: { amount: 0 },
+          },
+        ];
+
+        for (const invalidCase of invalidConfigurations) {
+          const { plan, actorId } = await createPlan();
+
+          const draft = await createDraft(
+            plan._id,
+            actorId,
+            makeConfiguration()
+          );
+
+          // Bypass Mongoose to simulate corrupted persisted data.
+          await SubscriptionPlanVersion.collection.updateOne(
+            { _id: draft._id },
+            {
+              $set: invalidCase.changes,
+            }
+          );
+
+          await expectReject(() =>
+            publishPlanVersion({
+              planId: plan._id,
+              versionId: draft._id,
+              actorId,
+            })
+          );
+
+          const stored = await SubscriptionPlanVersion.findById(
+            draft._id
+          );
+
+          const storedPlan = await SubscriptionPlan.findById(
+            plan._id
+          );
+
+          assert(
+            stored.status === "DRAFT",
+            `Draft with ${invalidCase.name} must remain a draft`
+          );
+
+          assert(
+            storedPlan.currentPublishedVersion == null,
+            `Plan with ${invalidCase.name} must not receive a published version`
+          );
+        }
+      }
+    );
 
 
 
@@ -607,7 +1077,7 @@ await connectTestDB();
     }
 
     if (createdPlanIds.length > 0) {
-      await SubscriptionPlan.deleteMany({
+      await SubscriptionPlan.collection.deleteMany({
         _id: { $in: createdPlanIds },
       });
     }

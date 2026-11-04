@@ -343,7 +343,212 @@ subscriptionSchema.index(
 );
 
 
+// -------------------------------------------------------------
+// COMMERCIAL SUBSCRIPTION SNAPSHOT PROTECTION
+//
+// A subscription records the exact commercial configuration
+// accepted at creation. Later plan publications must not alter
+// existing or historical subscription snapshots.
+//
+// This is Mongoose application-layer protection. Direct native
+// collection / database-admin writes remain outside its scope.
+// -------------------------------------------------------------
 
+const PROTECTED_SUBSCRIPTION_SNAPSHOT_PATHS = [
+  "plan",
+  "planVersion",
+  "amount",
+  "currency",
+  "paymentRequired",
+  "durationDays",
+  "features",
+  "limits",
+];
+
+function pathsOverlap(firstPath, secondPath) {
+  return (
+    firstPath === secondPath ||
+    firstPath.startsWith(`${secondPath}.`) ||
+    secondPath.startsWith(`${firstPath}.`)
+  );
+}
+
+function isProtectedSnapshotPath(path) {
+  return PROTECTED_SUBSCRIPTION_SNAPSHOT_PATHS.some(
+    (protectedPath) => pathsOverlap(path, protectedPath)
+  );
+}
+
+function getModifiedSnapshotPaths(document) {
+  return document
+    .modifiedPaths()
+    .filter(isProtectedSnapshotPath);
+}
+
+function createSnapshotProtectionError(paths) {
+  const error = new Error(
+    "Subscription commercial snapshot is immutable after creation. " +
+    `Protected fields: ${paths.join(", ")}`
+  );
+
+  error.code = "SUBSCRIPTION_SNAPSHOT_IMMUTABLE";
+  return error;
+}
+
+// Inspect an ordinary MongoDB update document.
+// Supports direct paths and operator-based paths such as:
+// $set, $unset, $inc, $rename, $push, $pull, $addToSet, etc.
+function collectUpdatedPaths(update, result = []) {
+  if (!update || typeof update !== "object") {
+    return result;
+  }
+
+  if (Array.isArray(update)) {
+    throw createSnapshotProtectionError([
+      "aggregation update pipeline",
+    ]);
+  }
+
+  for (const [key, value] of Object.entries(update)) {
+    if (key.startsWith("$")) {
+      if (
+        value &&
+        typeof value === "object" &&
+        !Array.isArray(value)
+      ) {
+        for (const updatePath of Object.keys(value)) {
+          result.push(updatePath);
+
+          // $rename has both a source and a destination path.
+          if (
+            key === "$rename" &&
+            typeof value[updatePath] === "string"
+          ) {
+            result.push(value[updatePath]);
+          }
+        }
+      }
+
+      continue;
+    }
+
+    // Non-operator update documents use direct field paths.
+    result.push(key);
+  }
+
+  return result;
+}
+
+function assertNoSnapshotUpdate(update) {
+  const updatedPaths = collectUpdatedPaths(update);
+
+  const protectedPaths = updatedPaths.filter(
+    isProtectedSnapshotPath
+  );
+
+  if (protectedPaths.length > 0) {
+    throw createSnapshotProtectionError(protectedPaths);
+  }
+}
+
+// -------------------------------------------------------------
+// DOCUMENT SAVE GUARD
+//
+// New subscriptions are allowed.
+// Existing subscriptions cannot change snapshot fields.
+// Lifecycle fields remain editable.
+// -------------------------------------------------------------
+
+subscriptionSchema.pre("save", function () {
+  if (this.isNew) {
+    return;
+  }
+
+  const modifiedSnapshotPaths =
+    getModifiedSnapshotPaths(this);
+
+  if (modifiedSnapshotPaths.length > 0) {
+    throw createSnapshotProtectionError(
+      modifiedSnapshotPaths
+    );
+  }
+});
+
+// -------------------------------------------------------------
+// QUERY UPDATE GUARDS
+//
+// findByIdAndUpdate uses findOneAndUpdate middleware.
+// Lifecycle-only updates remain allowed.
+// -------------------------------------------------------------
+
+const guardedQueryOperations = [
+  "updateOne",
+  "updateMany",
+  "findOneAndUpdate",
+];
+
+guardedQueryOperations.forEach((operation) => {
+  subscriptionSchema.pre(operation, function () {
+    assertNoSnapshotUpdate(this.getUpdate());
+  });
+});
+
+// -------------------------------------------------------------
+// REPLACEMENT GUARDS
+//
+// Replacement can remove protected fields even when they are
+// omitted from the replacement document. Reject replacements.
+// -------------------------------------------------------------
+
+subscriptionSchema.pre("replaceOne", function () {
+  throw createSnapshotProtectionError([
+    "replaceOne",
+  ]);
+});
+
+subscriptionSchema.pre("findOneAndReplace", function () {
+  throw createSnapshotProtectionError([
+    "findOneAndReplace",
+  ]);
+});
+
+// -------------------------------------------------------------
+// BULK WRITE GUARD
+//
+// Check each update operation. Deletion operations remain
+// available for registration rollback and test cleanup.
+// -------------------------------------------------------------
+
+subscriptionSchema.pre(
+  "bulkWrite",
+  function (operations) {
+    if (!Array.isArray(operations)) {
+      throw new Error(
+        "Unable to inspect Subscription bulkWrite operations."
+      );
+    }
+
+    for (const operation of operations) {
+      if (operation.updateOne) {
+        assertNoSnapshotUpdate(
+          operation.updateOne.update
+        );
+      }
+
+      if (operation.updateMany) {
+        assertNoSnapshotUpdate(
+          operation.updateMany.update
+        );
+      }
+
+      if (operation.replaceOne) {
+        throw createSnapshotProtectionError([
+          "bulkWrite.replaceOne",
+        ]);
+      }
+    }
+  }
+);
 
 
 subscriptionSchema.pre("validate", function () {
