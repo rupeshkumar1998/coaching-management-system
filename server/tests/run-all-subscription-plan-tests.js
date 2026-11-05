@@ -48,6 +48,13 @@ const TEST_FILES = [
     file: "tests/services/test-financial-integrity.js",
   },
 
+  // // 32.16.15.10 — Entitlement Service
+  // {
+  //   phase: "32.16.15.10",
+  //   label: "Entitlement Service",
+  //   file: "tests/services/test-entitlement-service.js",
+  // },
+
   // .16 — Security and regression (API level)
   {
     phase: "32.16.15.9.16",
@@ -68,6 +75,14 @@ const TEST_FILES = [
     phase: "32.16.15.9.16",
     label: "Super Admin Write Boundary Matrix",
     file: "tests/api/test-super-admin-write-boundary.js",
+  },
+
+
+   // 32.16.15.10 — Entitlement Service
+  {
+    phase: "32.16.15.10",
+    label: "Entitlement Service",
+    file: "tests/services/test-entitlement-service.js",
   },
 ];
 
