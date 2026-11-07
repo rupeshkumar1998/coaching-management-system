@@ -315,6 +315,7 @@
 // };
 
 
+const mongoose = require("mongoose");
 
 const Institute = require("../models/Institute");
 const User = require("../models/User");
@@ -330,16 +331,21 @@ const trialEligibilityService = require(
   "../services/trialEligibilityService"
 );
 
-const platformTrialSubscriptionService = require(
-  "../services/platformTrialSubscriptionService"
-);
-
 const TRIAL_CONFLICT_CODES = new Set([
   "TRIAL_ALREADY_USED",
   "ACTIVE_SUBSCRIPTION_EXISTS",
   "PENDING_SUBSCRIPTION_EXISTS",
   "SUBSCRIPTION_HISTORY_EXISTS",
 ]);
+
+const platformTrialSubscriptionService = require(
+  "../services/platformTrialSubscriptionService"
+);
+
+// 32.16.15.12 — Snapshot builder (unifies STANDARD + TRIAL shape)
+const {
+  buildSubscriptionSnapshot,
+} = require("../services/subscriptionSnapshotBuilder");
 
 function getRegistrationErrorStatus(error) {
   if (TRIAL_CONFLICT_CODES.has(error.code)) {
@@ -367,6 +373,8 @@ function getRegistrationErrorStatus(error) {
 const registerInstitute = async (req, res) => {
   let institute = null;
   let adminUser = null;
+  let subscription = null;
+  let payment = null;
 
   try {
     const {
@@ -494,149 +502,183 @@ const registerInstitute = async (req, res) => {
     // an Institute behind if password hashing fails.
     const hashedPassword = await hashPassword(password);
 
-    // 6. Create the pending Institute.
-    institute = await Institute.create({
-      name: instituteName.trim(),
-      code: normalizedInstituteCode,
-
-      email: instituteEmail
-        ? instituteEmail.trim().toLowerCase()
-        : null,
-
-      phone: institutePhone
-        ? institutePhone.trim()
-        : null,
-
-      address: address
-        ? address.trim()
-        : null,
-
-      approvalStatus: "PENDING",
-      isActive: false,
-
-      subscriptionStatus: "PENDING",
-      subscriptionPlan: normalizedPlanCode,
-    });
-
-    // 7. Create the pending Institute Admin.
-    try {
-      adminUser = await User.create({
-        instituteId: institute._id,
-
-        name: adminName.trim(),
-        email: normalizedAdminEmail,
-
-        phone: adminPhone
-          ? adminPhone.trim()
-          : null,
-
-        password: hashedPassword,
-        role: "INSTITUTE_ADMIN",
-
-        accountStatus: "PENDING",
-        isActive: false,
-      });
-    } catch (error) {
-      await Institute.findByIdAndDelete(institute._id);
-      institute = null;
-      throw error;
-    }
-
-    // 8. Create the subscription.
-    let subscription;
+    // ---------------------------------------------------------
+    // 32.16.15.12 — Atomic record creation
+    //
+    // STANDARD:
+    //   Institute + Admin + Subscription + Payment are created
+    //   inside a single MongoDB transaction. Any failure rolls
+    //   back atomically. A process crash mid-flow cannot leave
+    //   orphan records behind.
+    //
+    // TRIAL:
+    //   Unchanged. platformTrialSubscriptionService manages its
+    //   own transaction for subscription + lifetime claim.
+    //   Institute + Admin still use compensating deletes
+    //   (TRIAL transaction isolation improvement is deferred).
+    //
+    // Duplicate checks above (existingInstitute, existingUser)
+    // remain as UX fast-paths; the DB unique indexes enforce
+    // race safety inside the transaction.
+    // ---------------------------------------------------------
 
     if (subscriptionType === "TRIAL") {
+      // ========== TRIAL branch — unchanged flow ==========
+
       try {
-        // This service rechecks eligibility and creates the
-        // subscription + lifetime claim in one transaction.
+        institute = await Institute.create({
+          name: instituteName.trim(),
+          code: normalizedInstituteCode,
+          email: instituteEmail
+            ? instituteEmail.trim().toLowerCase()
+            : null,
+          phone: institutePhone ? institutePhone.trim() : null,
+          address: address ? address.trim() : null,
+          approvalStatus: "PENDING",
+          isActive: false,
+          subscriptionStatus: "PENDING",
+          subscriptionPlan: normalizedPlanCode,
+        });
+      } catch (error) {
+        throw error;
+      }
+
+      try {
+        adminUser = await User.create({
+          instituteId: institute._id,
+          name: adminName.trim(),
+          email: normalizedAdminEmail,
+          phone: adminPhone ? adminPhone.trim() : null,
+          password: hashedPassword,
+          role: "INSTITUTE_ADMIN",
+          accountStatus: "PENDING",
+          isActive: false,
+        });
+      } catch (error) {
+        await Institute.findByIdAndDelete(institute._id);
+        institute = null;
+        throw error;
+      }
+
+      try {
         subscription = (
-         await platformTrialSubscriptionService.createPlatformTrialSubscription({
-            instituteId: institute._id,
-           })
+          await platformTrialSubscriptionService.createPlatformTrialSubscription(
+            {
+              instituteId: institute._id,
+            }
+          )
         ).subscription;
       } catch (error) {
-        // The trial service rolls back its own transaction.
-        // Clean up the records created by this registration.
         await User.findByIdAndDelete(adminUser._id);
         adminUser = null;
-
         await Institute.findByIdAndDelete(institute._id);
         institute = null;
-
         throw error;
       }
+
+      payment = null;
     } else {
+      // ========== STANDARD branch — atomic transaction ==========
+
+      const session = await mongoose.startSession();
+
+      let createdInstitute = null;
+      let createdAdmin = null;
+      let createdSubscription = null;
+      let createdPayment = null;
+
       try {
-        subscription = await Subscription.create({
-          instituteId: institute._id,
-          subscriptionType: "STANDARD",
+        await session.withTransaction(async () => {
+          [createdInstitute] = await Institute.create(
+            [
+              {
+                name: instituteName.trim(),
+                code: normalizedInstituteCode,
+                email: instituteEmail
+                  ? instituteEmail.trim().toLowerCase()
+                  : null,
+                phone: institutePhone ? institutePhone.trim() : null,
+                address: address ? address.trim() : null,
+                approvalStatus: "PENDING",
+                isActive: false,
+                subscriptionStatus: "PENDING",
+                subscriptionPlan: normalizedPlanCode,
+              },
+            ],
+            { session }
+          );
 
-          plan: normalizedPlanCode,
-          planVersion: planVersion.version,
-          planVersionId: planVersion._id,
+          [createdAdmin] = await User.create(
+            [
+              {
+                instituteId: createdInstitute._id,
+                name: adminName.trim(),
+                email: normalizedAdminEmail,
+                phone: adminPhone ? adminPhone.trim() : null,
+                password: hashedPassword,
+                role: "INSTITUTE_ADMIN",
+                accountStatus: "PENDING",
+                isActive: false,
+              },
+            ],
+            { session }
+          );
 
-          amount,
-          currency,
-          paymentRequired: planVersion.paymentRequired,
-          durationDays: planVersion.durationDays,
+          const snapshot = buildSubscriptionSnapshot(
+            planVersion,
+            normalizedPlanCode
+          );
 
-          features: (planVersion.features || []).map(
-            ({ key, enabled }) => ({
-              key,
-              enabled,
-            })
-          ),
+          [createdSubscription] = await Subscription.create(
+            [
+              {
+                ...snapshot,
+                instituteId: createdInstitute._id,
+                subscriptionType: "STANDARD",
+                status: "PENDING",
+                autoRenew: false,
+              },
+            ],
+            { session }
+          );
 
-          limits: (planVersion.limits || []).map(
-            ({ key, value }) => ({
-              key,
-              value,
-            })
-          ),
+          createdPayment = null;
 
-          status: "PENDING",
-          autoRenew: false,
+          if (planVersion.paymentRequired === true) {
+            [createdPayment] = await Payment.create(
+              [
+                {
+                  instituteId: createdInstitute._id,
+                  subscriptionId: createdSubscription._id,
+                  paymentType: "INSTITUTE_SUBSCRIPTION",
+                  amount,
+                  currency,
+                  method: "MANUAL_UPI",
+                  gateway: "NONE",
+                  status: "PENDING",
+                },
+              ],
+              { session }
+            );
+          }
         });
+
+        // Transaction committed. Expose refs to the response.
+        institute = createdInstitute;
+        adminUser = createdAdmin;
+        subscription = createdSubscription;
+        payment = createdPayment;
       } catch (error) {
-        await User.findByIdAndDelete(adminUser._id);
-        adminUser = null;
-
-        await Institute.findByIdAndDelete(institute._id);
-        institute = null;
-
-        throw error;
-      }
-    }
-
-    // 9. Create a Payment only for standard paid plans.
-    let payment = null;
-
-    if (
-      subscriptionType === "STANDARD" &&
-      planVersion.paymentRequired === true
-    ) {
-      try {
-        payment = await Payment.create({
-          instituteId: institute._id,
-          subscriptionId: subscription._id,
-
-          paymentType: "INSTITUTE_SUBSCRIPTION",
-          amount,
-          currency,
-
-          method: "MANUAL_UPI",
-          gateway: "NONE",
-          status: "PENDING",
-        });
-      } catch (error) {
-        await Subscription.findByIdAndDelete(subscription._id);
-        await User.findByIdAndDelete(adminUser._id);
-        await Institute.findByIdAndDelete(institute._id);
-
+        // Transaction rolled back automatically by MongoDB.
+        // Reset refs so the outer catch handler never sees
+        // half-created state.
         institute = null;
         adminUser = null;
-
+        subscription = null;
+        payment = null;
         throw error;
+      } finally {
+        await session.endSession();
       }
     }
 

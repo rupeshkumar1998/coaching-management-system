@@ -23,6 +23,8 @@ const original = {
   createPlatformTrialSubscription:
     platformTrialSubscriptionService.createPlatformTrialSubscription,
 
+  startSession: mongoose.startSession,
+
   instituteFindOne: Institute.findOne,
   instituteCreate: Institute.create,
   instituteDelete: Institute.findByIdAndDelete,
@@ -87,10 +89,12 @@ function installMocks() {
   Institute.findOne = async ({ code }) =>
     records.institutes.find((item) => item.code === code) || null;
 
-  Institute.create = async (data) => {
-    const item = { ...data, _id: ids() };
+  Institute.create = async (data, _options = {}) => {
+    const isArray = Array.isArray(data);
+    const doc = isArray ? data[0] : data;
+    const item = { ...doc, _id: ids() };
     records.institutes.push(item);
-    return item;
+    return isArray ? [item] : item;
   };
 
   Institute.findByIdAndDelete = async (id) => {
@@ -102,10 +106,12 @@ function installMocks() {
   User.findOne = async ({ email }) =>
     records.users.find((item) => item.email === email) || null;
 
-  User.create = async (data) => {
-    const item = { ...data, _id: ids() };
+  User.create = async (data, _options = {}) => {
+    const isArray = Array.isArray(data);
+    const doc = isArray ? data[0] : data;
+    const item = { ...doc, _id: ids() };
     records.users.push(item);
-    return item;
+    return isArray ? [item] : item;
   };
 
   User.findByIdAndDelete = async (id) => {
@@ -114,10 +120,12 @@ function installMocks() {
     );
   };
 
-  Subscription.create = async (data) => {
-    const item = { ...data, _id: ids() };
+  Subscription.create = async (data, _options = {}) => {
+    const isArray = Array.isArray(data);
+    const doc = isArray ? data[0] : data;
+    const item = { ...doc, _id: ids() };
     records.subscriptions.push(item);
-    return item;
+    return isArray ? [item] : item;
   };
 
   Subscription.findByIdAndDelete = async (id) => {
@@ -126,14 +134,16 @@ function installMocks() {
     );
   };
 
-  Payment.create = async (data) => {
+  Payment.create = async (data, _options = {}) => {
     if (failPaymentCreation) {
       throw new Error("Simulated payment creation failure");
     }
 
-    const item = { ...data, _id: ids() };
+    const isArray = Array.isArray(data);
+    const doc = isArray ? data[0] : data;
+    const item = { ...doc, _id: ids() };
     records.payments.push(item);
-    return item;
+    return isArray ? [item] : item;
   };
 
   SubscriptionPlan.findOne = (query) => ({
@@ -232,6 +242,42 @@ function installMocks() {
         eligibility: { eligible: true },
       };
     };
+
+  // ---------------------------------------------------------
+  // 32.16.15.12 — Transaction mock
+  //
+  // Fakes a MongoDB session with atomic rollback semantics:
+  //   - On success: mutations persist
+  //   - On error:   mutations are reverted to the pre-transaction
+  //                 snapshot, mimicking real MongoDB behavior
+  //
+  // No DB connection is required; the mocks are the store.
+  // ---------------------------------------------------------
+  mongoose.startSession = async () => {
+    return {
+      withTransaction: async (fn) => {
+        const snapshotBefore = {
+          institutes: [...records.institutes],
+          users: [...records.users],
+          subscriptions: [...records.subscriptions],
+          payments: [...records.payments],
+        };
+
+        try {
+          await fn();
+        } catch (error) {
+          records.institutes = snapshotBefore.institutes;
+          records.users = snapshotBefore.users;
+          records.subscriptions = snapshotBefore.subscriptions;
+          records.payments = snapshotBefore.payments;
+          throw error;
+        }
+      },
+      endSession: async () => {
+        // No-op
+      },
+    };
+  };
 }
 
 function resetRecords() {
@@ -471,6 +517,7 @@ async function run() {
       process.exitCode = 1;
     }
   } finally {
+    mongoose.startSession = original.startSession;
     Institute.findOne = original.instituteFindOne;
     Institute.create = original.instituteCreate;
     Institute.findByIdAndDelete = original.instituteDelete;

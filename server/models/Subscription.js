@@ -51,7 +51,7 @@ const subscriptionSchema = new mongoose.Schema(
     },
 
 
-        // Exact database configuration version selected for this subscription.
+    // Exact database configuration version selected for this subscription.
     // Optional for backward compatibility with existing subscriptions.
     planVersionId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -60,7 +60,28 @@ const subscriptionSchema = new mongoose.Schema(
       immutable: true,
     },
 
-
+    // ---------------------------------------------------------
+    // 32.16.15.12 — Snapshot capture timestamp
+    //
+    // Set at subscription creation to record exactly when the
+    // commercial snapshot (features/limits/amount/etc.) was
+    // captured from the referenced plan version.
+    //
+    // Purpose:
+    //   - Audit proof: "when did we freeze this configuration?"
+    //   - Distinguishes legacy subs (null) from new ones
+    //   - Enables future reconciliation tools to detect drift
+    //
+    // Legacy subscriptions (created before .12) legitimately
+    // have null. This is expected and safe.
+    //
+    // Immutable after creation — protected via
+    // PROTECTED_SUBSCRIPTION_SNAPSHOT_PATHS below.
+    // ---------------------------------------------------------
+    snapshotCapturedAt: {
+      type: Date,
+      default: null,
+    },
 
     // ---------------------------------------------------------
     // Financial Snapshot
@@ -108,7 +129,7 @@ const subscriptionSchema = new mongoose.Schema(
 
 
 
-        // Entitlement snapshot captured from the selected plan version.
+    // Entitlement snapshot captured from the selected plan version.
     // Optional for backward compatibility with historical records.
     features: {
       type: [
@@ -261,7 +282,7 @@ const subscriptionSchema = new mongoose.Schema(
     // ---------------------------------------------------------
     // Trial Metadata
     // ---------------------------------------------------------
-        // ---------------------------------------------------------
+    // ---------------------------------------------------------
     // Trial Source and Platform Offer Snapshot
     // ---------------------------------------------------------
     trialSource: {
@@ -363,6 +384,7 @@ const PROTECTED_SUBSCRIPTION_SNAPSHOT_PATHS = [
   "durationDays",
   "features",
   "limits",
+  "snapshotCapturedAt",  // ← 32.16.15.12 — capture timestamp
 ];
 
 function pathsOverlap(firstPath, secondPath) {

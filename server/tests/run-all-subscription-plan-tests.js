@@ -48,12 +48,7 @@ const TEST_FILES = [
     file: "tests/services/test-financial-integrity.js",
   },
 
-  // // 32.16.15.10 — Entitlement Service
-  // {
-  //   phase: "32.16.15.10",
-  //   label: "Entitlement Service",
-  //   file: "tests/services/test-entitlement-service.js",
-  // },
+
 
   // .16 — Security and regression (API level)
   {
@@ -100,6 +95,23 @@ const TEST_FILES = [
     phase: "32.16.15.11",
     label: "Limit Service Core",
     file: "tests/services/test-limit-service.js",
+  },
+
+    // 32.16.15.12 — Subscription Snapshot Creation
+  {
+    phase: "32.16.15.12",
+    label: "Subscription Snapshot Builder (unit)",
+    file: "tests/services/test-subscription-snapshot-builder.js",
+  },
+  {
+    phase: "32.16.15.12",
+    label: "Subscription Snapshot Creation",
+    file: "tests/services/test-subscription-snapshot-creation.js",
+  },
+  {
+    phase: "32.16.15.12",
+    label: "Subscription Service Regression",
+    file: "tests/services/test-subscription-service.js",
   },
 ];
 
@@ -170,7 +182,7 @@ function runTestFile(relativeFile) {
 
 async function run() {
   console.log("═".repeat(72));
-  console.log("  32.16.15 — Subscription & Entitlement Stack (Phases .9–.11): FULL TEST SUITE");
+  console.log("  32.16.15 — Subscription & Entitlement Stack (Phases .9–.12): FULL TEST SUITE");
   console.log("═".repeat(72));
   console.log();
 

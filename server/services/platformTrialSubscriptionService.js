@@ -9,6 +9,11 @@ const {
   checkTrialEligibility,
 } = require("./trialEligibilityService");
 
+// 32.16.15.12 — Snapshot builder (unifies snapshot shape)
+const {
+  buildSubscriptionSnapshot,
+} = require("./subscriptionSnapshotBuilder");
+
 function validateInstituteId(instituteId) {
   if (!instituteId || !mongoose.isValidObjectId(instituteId)) {
     throw createTrialEligibilityError(
@@ -16,20 +21,6 @@ function validateInstituteId(instituteId) {
       "A valid Institute ID is required to create a platform trial"
     );
   }
-}
-
-function cloneSnapshotArray(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.map((item) => {
-    if (item && typeof item.toObject === "function") {
-      return item.toObject();
-    }
-
-    return { ...item };
-  });
 }
 
 function isLifetimeClaimDuplicate(error) {
@@ -77,26 +68,33 @@ async function createPlatformTrialSubscriptionInTransaction({
 
   const planCode = String(eligibility.plan.code || "").toUpperCase();
 
+  // 32.16.15.12 — Build the immutable commercial snapshot
+  // through the shared helper. This ensures TRIAL and
+  // STANDARD subscriptions carry an identical snapshot
+  // shape, and that `snapshotCapturedAt` is populated.
+  const snapshot = buildSubscriptionSnapshot(
+    eligibility.planVersion,
+    planCode,
+    {
+      overrides: {
+        // Defense-in-depth: TRIAL must always be free.
+        // checkTrialEligibility() already guarantees these
+        // values, but stating them explicitly prevents silent
+        // regressions if eligibility rules ever change.
+        amount: 0,
+        paymentRequired: false,
+
+        // TRIAL duration comes from the offer, not the plan
+        // version (the plan version has no durationDays).
+        durationDays: eligibility.offer.durationDays,
+      },
+    }
+  );
+
   const subscription = new Subscription({
     instituteId: eligibility.instituteId,
     subscriptionType: "TRIAL",
-    plan: planCode,
-
-    // Snapshot the exact published plan configuration.
-    planVersion: eligibility.planVersion.version,
-    planVersionId: eligibility.planVersion.planVersionId,
-
-    amount: 0,
-    currency: eligibility.planVersion.currency,
-    paymentRequired: false,
-    durationDays: eligibility.offer.durationDays,
-
-    features: cloneSnapshotArray(
-      eligibility.planVersion.features
-    ),
-    limits: cloneSnapshotArray(
-      eligibility.planVersion.limits
-    ),
+    ...snapshot,
 
     status: "PENDING",
 
