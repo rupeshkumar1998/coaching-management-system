@@ -84,7 +84,25 @@ const TEST_FILES = [
     label: "Entitlement Service",
     file: "tests/services/test-entitlement-service.js",
   },
+
+    // 32.16.15.11 — Limit Service
+  {
+    phase: "32.16.15.11",
+    label: "Limit Counter Registry",
+    file: "tests/services/test-limit-counter-registry.js",
+  },
+  {
+    phase: "32.16.15.11",
+    label: "Limit Counter Implementations",
+    file: "tests/services/test-limit-counters.js",
+  },
+  {
+    phase: "32.16.15.11",
+    label: "Limit Service Core",
+    file: "tests/services/test-limit-service.js",
+  },
 ];
+
 
 function runTestFile(relativeFile) {
   return new Promise((resolve) => {
@@ -152,7 +170,7 @@ function runTestFile(relativeFile) {
 
 async function run() {
   console.log("═".repeat(72));
-  console.log("  32.16.15.9 — Subscription Plan Management: FULL TEST SUITE");
+  console.log("  32.16.15 — Subscription & Entitlement Stack (Phases .9–.11): FULL TEST SUITE");
   console.log("═".repeat(72));
   console.log();
 

@@ -532,6 +532,121 @@ const checkFeatureAccess = async (instituteId, featureKey) => {
   }
 };
 
+// ---------------------------------------------------------
+// .11.9 — Check feature in an already-loaded subscription
+//
+// Same decision logic as `checkFeatureAccess`, but avoids
+// the redundant DB round-trip when the caller already has
+// the subscription document (e.g., LimitService.checkLimit).
+//
+// This is the reusable primitive that lets higher layers
+// enforce feature dependencies without a second query.
+//
+// Note: The middle portion duplicates the logic from
+// `checkFeatureAccess`. If the duplication ever causes
+// drift, refactor both to share an internal helper.
+// For now, keeping the public surface stable is more
+// valuable than micro-optimizing code size.
+// ---------------------------------------------------------
+
+/**
+ * Check whether a specific feature is enabled in an
+ * already-resolved subscription. Pure — no DB calls.
+ *
+ * @param {object} subscription - Mongoose Subscription document
+ * @param {*} featureKey        - case-insensitive feature key
+ * @returns {{ allowed: boolean, featureKey: string|null, reason: string|null, source: "SUBSCRIPTION"|null }}
+ */
+const checkFeatureInSubscription = (subscription, featureKey) => {
+  let normalizedFeatureKey = null;
+
+  try {
+    if (!subscription) {
+      throw createEntitlementError(
+        "SUBSCRIPTION_INACTIVE",
+        "A subscription is required"
+      );
+    }
+
+    normalizedFeatureKey = validateFeatureKey(featureKey);
+    assertFeatureSnapshotUsable(subscription);
+
+    const featureIndex = buildFeatureIndex(subscription.features);
+    const isEnabled = featureIndex.get(normalizedFeatureKey) === true;
+    const requestedIsCore = isCoreFeature(normalizedFeatureKey);
+
+    if (requestedIsCore) {
+      if (!isEnabled) {
+        console.error(
+          "[entitlementService] CORE feature corrupted in subscription snapshot",
+          {
+            subscriptionId: String(subscription._id),
+            featureKey: normalizedFeatureKey,
+            entryFound: featureIndex.has(normalizedFeatureKey),
+            enabled: featureIndex.get(normalizedFeatureKey) ?? null,
+          }
+        );
+
+        return {
+          allowed: false,
+          featureKey: normalizedFeatureKey,
+          reason: "ENTITLEMENT_CONFIGURATION_INVALID",
+          source: null,
+        };
+      }
+
+      return {
+        allowed: true,
+        featureKey: normalizedFeatureKey,
+        reason: null,
+        source: "SUBSCRIPTION",
+      };
+    }
+
+    if (!isEnabled) {
+      return {
+        allowed: false,
+        featureKey: normalizedFeatureKey,
+        reason: "FEATURE_NOT_INCLUDED",
+        source: "SUBSCRIPTION",
+      };
+    }
+
+    return {
+      allowed: true,
+      featureKey: normalizedFeatureKey,
+      reason: null,
+      source: "SUBSCRIPTION",
+    };
+  } catch (error) {
+    if (error && BUSINESS_ERROR_CODES.has(error.code)) {
+      return {
+        allowed: false,
+        featureKey: normalizedFeatureKey,
+        reason: error.code,
+        source: null,
+      };
+    }
+
+    console.error(
+      "[entitlementService] checkFeatureInSubscription unexpected failure",
+      {
+        subscriptionId: String(subscription?._id || "unknown"),
+        featureKey: normalizedFeatureKey,
+        errorName: error?.name,
+        errorMessage: error?.message,
+      }
+    );
+
+    return {
+      allowed: false,
+      featureKey: normalizedFeatureKey,
+      reason: "INTERNAL_ERROR",
+      source: null,
+    };
+  }
+};
+
 /**
  * Convenience wrapper: boolean-only form of checkFeatureAccess.
  *
@@ -690,6 +805,7 @@ module.exports = {
   validateFeatureKey,
   resolveEffectiveSubscription,
   checkFeatureAccess,
+  checkFeatureInSubscription,
   hasFeature,
   getInstituteEntitlements,
 };
