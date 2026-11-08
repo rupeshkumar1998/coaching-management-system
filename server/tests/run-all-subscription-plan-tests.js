@@ -120,6 +120,12 @@ const TEST_FILES = [
     label: "Legacy Subscription Compatibility",
     file: "tests/services/test-legacy-subscription-compatibility.js",
   },
+   // 32.16.15.14 — Permission ↔ Entitlement Boundary
+  {
+    phase: "32.16.15.14",
+    label: "Permission-Entitlement Boundary",
+    file: "tests/api/test-permission-entitlement-boundary.js",
+  },
 ];
 
 
@@ -189,7 +195,7 @@ function runTestFile(relativeFile) {
 
 async function run() {
   console.log("═".repeat(72));
-  console.log("  32.16.15 — Subscription & Entitlement Stack (Phases .9–.13): FULL TEST SUITE");
+  console.log("  32.16.15 — Subscription & Entitlement Stack (Phases .9–.14): FULL TEST SUITE");
   console.log("═".repeat(72));
   console.log();
 

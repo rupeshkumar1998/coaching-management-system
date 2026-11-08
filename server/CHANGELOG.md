@@ -10,11 +10,67 @@ Phases are numbered per the master roadmap (`32.16.15.X`).
 ## [Unreleased]
 
 ### Pending Phases (from 32.16.15)
-- 32.16.15.14 — Entitlement regression tests
 - 32.16.15.15 — Trial ON/OFF regression
 - 32.16.15.16 — Plan version regression
 - 32.16.15.17 — Feature/limit change regression
 - 32.16.15.18 — Final entitlement security regression
+
+
+## [32.16.15.14] - 2026-11-08
+
+### Added — Entitlement Regression: Permission ↔ Entitlement Boundary
+
+**Context:** Section 5 of the phase plan (permission vs entitlement
+independence). The rest of the phase plan was already covered by
+previous phases — this entry consolidates the coverage map and adds
+the missing boundary tests.
+
+### Boundary Tests Added (8 new tests):
+
+**Part A — Contract-level (4 tests):**
+- A1: `permissionMiddleware.js` does NOT import `entitlementService`
+- A2: `entitlementService.js` does NOT import `permissionMiddleware`
+- A3: SUPER_ADMIN bypasses permission, but entitlement still evaluates
+- A4: INSTITUTE_OWNER bypasses permission, but entitlement still evaluates
+
+**Part B — API integration (4 tests):**
+- B1: Permission ✓ + Entitlement ✓ → 200
+- B2: Permission ✗ + Entitlement ✓ → 403 (permission denies first, no `reason` field)
+- B3: Permission ✓ + Entitlement ✗ → 403 (has `reason` field)
+- B4: Permission ✗ + Entitlement ✗ → 403 (permission short-circuits)
+
+### Already Covered by Previous Phases (consolidated map):
+
+| Section (from plan) | Covered by | Tests |
+|---------|-----------|------|
+| §1 Test flow | All existing test files | — |
+| §2 Core entitlement | `.10` | 40 |
+| §3 Historical version regression | `.10` + `.12` + `.9.16` | 5+ |
+| §4 Tenant isolation | `.10` + `.9.16` | 9+ |
+| **§5 Permission vs entitlement** | **`.14` (this phase)** | **8** |
+| §6 Snapshot integrity | `.12` + `.13` + `.9.4` | 80+ |
+| §7 Test organization | Kept current structure (no reorg) | — |
+| §8 Test environment rules | All existing files follow | — |
+| §9 When to run | Master runner | — |
+| §10 Completion criteria | All met (see below) | — |
+
+### Completion Criteria — Verified:
+
+- [x] Entitlement service tests pass (`.10` — 40 tests)
+- [x] Subscription status tests pass (`.10` — covered)
+- [x] Historical version regression (`.10`, `.12`, `.9.16`)
+- [x] Snapshot integrity tests (`.12` — 53 tests)
+- [x] Cross-tenant tests (`.10` — 5, `.9.16` — 4)
+- [x] Permission-vs-entitlement tests (`.14` — 8 new)
+- [x] Legacy compatibility (`.13` — 15 tests)
+- [x] Failure cases grant no unauthorized access (fail-closed everywhere)
+
+### Tests:
+- 8 new tests → 436 total tests, 0 failures
+
+### References:
+- New test file: `tests/api/test-permission-entitlement-boundary.js`
+- Depends on: `.10` (Entitlement), `.11` (Limit), `.12` (Snapshot), `.13` (Legacy)
 
 ----
 ## [32.16.15.13] - 2026-11-08
