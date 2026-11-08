@@ -234,6 +234,17 @@ const assertFeatureSnapshotUsable = (subscription) => {
     );
   }
 
+  // =========================================================
+  // ⚠️ 32.16.15.13 — LEGACY COMPATIBILITY PATH — DO NOT REMOVE
+  //
+  // `subscription.features === undefined` → fail closed with
+  // ENTITLEMENT_SNAPSHOT_MISSING. Never fall back to "unlimited"
+  // or "allow all" — this is by design.
+  //
+  // Protected by tests:
+  //   tests/services/test-legacy-subscription-compatibility.js
+  //     (Group C: entitlementService Legacy Behavior)
+  // =========================================================
   if (subscription.features === undefined) {
     console.error(
       "[entitlementService] legacy subscription without feature snapshot",

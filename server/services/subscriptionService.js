@@ -334,12 +334,27 @@ return logicalPlan;
     return logicalPlan;
   }
 
+  // =========================================================
+  // ⚠️ 32.16.15.13 — LEGACY COMPATIBILITY PATH — DO NOT REMOVE
+  //
+  // This fallback handles pre-.12 subscriptions that have
+  // `planVersionId === null`. They were created before the
+  // database-backed plan version architecture.
+  //
+  // Removing this code would BREAK all legacy subscriptions.
+  //
+  // Protected by tests:
+  //   tests/services/test-legacy-subscription-compatibility.js
+  //     (Group B: validatePlanSnapshot Legacy Fallback)
+  //
+  // See: CHANGELOG.md [32.16.15.13]
+  // =========================================================
+
   // -------------------------------------------------------
   // LEGACY SUBSCRIPTIONS
   // Keep the existing validation for records without
   // planVersionId to preserve backward compatibility.
   // -------------------------------------------------------
-
   const plan = getSubscriptionPlan(subscription.plan);
 
   if (!plan) {

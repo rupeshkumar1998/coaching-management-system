@@ -73,14 +73,14 @@ const TEST_FILES = [
   },
 
 
-   // 32.16.15.10 — Entitlement Service
+  // 32.16.15.10 — Entitlement Service
   {
     phase: "32.16.15.10",
     label: "Entitlement Service",
     file: "tests/services/test-entitlement-service.js",
   },
 
-    // 32.16.15.11 — Limit Service
+  // 32.16.15.11 — Limit Service
   {
     phase: "32.16.15.11",
     label: "Limit Counter Registry",
@@ -97,7 +97,7 @@ const TEST_FILES = [
     file: "tests/services/test-limit-service.js",
   },
 
-    // 32.16.15.12 — Subscription Snapshot Creation
+  // 32.16.15.12 — Subscription Snapshot Creation
   {
     phase: "32.16.15.12",
     label: "Subscription Snapshot Builder (unit)",
@@ -112,6 +112,13 @@ const TEST_FILES = [
     phase: "32.16.15.12",
     label: "Subscription Service Regression",
     file: "tests/services/test-subscription-service.js",
+  },
+
+  // 32.16.15.13 — Legacy Subscription Compatibility
+  {
+    phase: "32.16.15.13",
+    label: "Legacy Subscription Compatibility",
+    file: "tests/services/test-legacy-subscription-compatibility.js",
   },
 ];
 
@@ -182,7 +189,7 @@ function runTestFile(relativeFile) {
 
 async function run() {
   console.log("═".repeat(72));
-  console.log("  32.16.15 — Subscription & Entitlement Stack (Phases .9–.12): FULL TEST SUITE");
+  console.log("  32.16.15 — Subscription & Entitlement Stack (Phases .9–.13): FULL TEST SUITE");
   console.log("═".repeat(72));
   console.log();
 

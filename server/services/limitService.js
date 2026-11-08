@@ -364,6 +364,16 @@ const resolveLimitValue = (subscription, normalizedLimitKey) => {
 
   const limitIndex = buildLimitIndex(subscription.limits || []);
 
+  // =========================================================
+  // ⚠️ 32.16.15.13 — LEGACY COMPATIBILITY PATH — DO NOT REMOVE
+  //
+  // Missing limit in snapshot → fail closed with
+  // LIMIT_NOT_CONFIGURED. Never assume "null = unlimited".
+  //
+  // Protected by tests:
+  //   tests/services/test-legacy-subscription-compatibility.js
+  //     (Group D: limitService Legacy Behavior)
+  // =========================================================
   if (!limitIndex.has(normalizedLimitKey)) {
     throw createLimitError(
       "LIMIT_NOT_CONFIGURED",
