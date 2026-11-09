@@ -661,10 +661,43 @@ const retireTrialOffer = async ({
   }
 };
 
+// --------------------------------------------------
+// 6. READ — CURRENT PUBLISHED OFFER
+// --------------------------------------------------
+
+const getCurrentPublishedTrialOffer = async () => {
+  const offer = await PlatformTrialOffer.findOne({
+    status: "PUBLISHED",
+  })
+    .select(
+      "_id version status enabled planId planVersionId durationDays eligibility publishedAt publishedBy retiredAt retiredBy createdBy updatedBy createdAt updatedAt"
+    )
+    .lean();
+
+  return offer;
+};
+
+// --------------------------------------------------
+// 7. READ — ALL OFFERS (HISTORY)
+// --------------------------------------------------
+
+const listTrialOffers = async () => {
+  const offers = await PlatformTrialOffer.find({})
+    .select(
+      "_id version status enabled planId planVersionId durationDays eligibility publishedAt publishedBy retiredAt retiredBy createdBy updatedBy createdAt updatedAt"
+    )
+    .sort({ version: -1 })
+    .lean();
+
+  return offers;
+};
+
 module.exports = {
   createDraftTrialOffer,
   updateDraftTrialOffer,
   publishTrialOffer,
   setTrialOfferEnabled,
   retireTrialOffer,
+  getCurrentPublishedTrialOffer,
+  listTrialOffers,
 };

@@ -60,6 +60,7 @@ const ownerSubscriptionPlanRoutes = require("./routes/ownerSubscriptionPlanRoute
 const instituteAdminSubscriptionPlanRoutes = require("./routes/instituteAdminSubscriptionPlanRoutes");
 
 const subscriptionPlanVersionRoutes = require("./routes/subscriptionPlanVersionRoutes");
+const trialOfferAdminRoutes = require("./routes/trialOfferAdminRoutes");
 const auditLogRoutes = require("./routes/auditLogRoutes");
 
 app.use("/api/bootstrap", bootstrapRoutes);
@@ -80,6 +81,7 @@ app.use("/api/owner/subscription-plans", ownerSubscriptionPlanRoutes);
 app.use("/api/admin/available-subscription-plans", instituteAdminSubscriptionPlanRoutes);
 
 app.use("/api/admin/subscription-plans", subscriptionPlanVersionRoutes);
+app.use("/api/admin/trial-offer", trialOfferAdminRoutes);
 app.use("/api/admin/audit-logs", auditLogRoutes);
 
 module.exports = app;
