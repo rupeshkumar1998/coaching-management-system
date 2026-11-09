@@ -10,9 +10,65 @@ Phases are numbered per the master roadmap (`32.16.15.X`).
 ## [Unreleased]
 
 ### Pending Phases (from 32.16.15)
-- 32.16.15.16 — Plan version regression
 - 32.16.15.17 — Feature/limit change regression
 - 32.16.15.18 — Final entitlement security regression
+
+
+## [32.16.15.16] - 2026-11-09
+
+### Added — Plan Version Regression (formal consolidated proof)
+
+**Context:** Plan version immutability was already covered across
+`.9.14`, `.9.16`, `.12`. This phase consolidates the 10-item
+regression matrix from the phase plan into a single test file and
+adds the previously-unmounted immutability suite to the master runner.
+
+### Added — Consolidated regression file (12 new tests)
+
+`tests/services/test-plan-version-regression.js` — one-file proof for
+the plan's 10-item regression matrix plus 2 supporting checks:
+
+1. v3 status → RETIRED (not deleted) after v4 publish
+2. v3 amount/features/limits unchanged after v4
+3. Existing subscription still references v3 (planVersionId)
+4. New subscription after v4 → references v4
+5. Price isolation: A ₹1999, B ₹2499
+6. Feature addition in v4 → existing v3 subscriber does not have it
+7. Feature retention across publish
+8. Limit increase in v4 → existing v3 subscriber unchanged
+9. Limit decrease in v4 → existing v3 subscriber unchanged
+10. Plan disable → existing subscriptions stay ACTIVE
+11. Editing a published version → rejected
+12. currentPublishedVersion pointer integrity + RETIRED versions readable
+
+### Added — Runner integration (previously unmounted)
+
+`tests/services/test-subscription-plan-version-immutability.js`
+(28 tests) — this file existed since `.9` but was not in the
+master runner. Now CI-enforced.
+
+Coverage:
+- Document save rejection on PUBLISHED/RETIRED
+- updateOne / updateMany / findOneAndUpdate rejection
+- replaceOne / findOneAndReplace rejection
+- bulkWrite / insertMany / insertOne rejection
+- All deletion methods rejection (deleteOne, deleteMany, findOneAndDelete)
+- Logical plan deletion rejection
+- planId and version immutability
+- Status change blocking (including $unset, $setOnInsert, $set with updatePipeline)
+- Upsert rejection
+
+### Tests:
+- 12 new consolidated tests
+- +28 previously-unmounted immutability tests now in CI
+- 498 total tests, 0 failures
+
+### References:
+- Depends on: `.9.4` PlanVersion, `.9.14` lifecycle, `.12` snapshot
+- Parent roadmap: 8 of 10 phases complete (80%)
+- CHANGELOG.md updated
+
+---
 
 ## [32.16.15.15] - 2026-11-09
 

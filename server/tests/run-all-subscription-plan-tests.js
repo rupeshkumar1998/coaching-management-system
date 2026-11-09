@@ -140,6 +140,18 @@ const TEST_FILES = [
     label: "Trial Offer Toggle Regression",
     file: "tests/services/test-trial-offer-toggle-regression.js",
   },
+
+  // 32.16.15.16 — Plan Version Regression
+  {
+    phase: "32.16.15.16",
+    label: "Plan Version Immutability (existing)",
+    file: "tests/services/test-subscription-plan-version-immutability.js",
+  },
+  {
+    phase: "32.16.15.16",
+    label: "Plan Version Regression (consolidated)",
+    file: "tests/services/test-plan-version-regression.js",
+  },
 ];
 
 
@@ -209,8 +221,7 @@ function runTestFile(relativeFile) {
 
 async function run() {
   console.log("═".repeat(72));
-  console.log("  32.16.15 — Subscription & Entitlement Stack (Phases .9–.15): FULL TEST SUITE");  console.log("═".repeat(72));
-  console.log();
+  console.log("  32.16.15 — Subscription & Entitlement Stack (Phases .9–.16): FULL TEST SUITE");  console.log();
 
   let totalPassed = 0;
   let totalFailed = 0;
