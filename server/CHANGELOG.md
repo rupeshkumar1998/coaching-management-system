@@ -10,9 +10,79 @@ Phases are numbered per the master roadmap (`32.16.15.X`).
 ## [Unreleased]
 
 ### Pending Phases (from 32.16.15)
-- 32.16.15.17 — Feature/limit change regression
 - 32.16.15.18 — Final entitlement security regression
 
+## [32.16.15.17] - 2026-11-09
+
+### Added — Feature/Limit Change Regression (consolidated proof)
+
+**Context:** Feature↔limit dependency validation was already covered
+by `.9.14` and `.12`. This phase consolidates the dependency matrix
+into a single formal file and adds the previously-unmounted catalog
+validation suite to the master runner.
+
+### Added — Consolidated regression file (15 new tests)
+
+`tests/services/test-feature-limit-change-regression.js`
+
+**Section A — Feature ↔ Limit dependency (5 tests):**
+- A1: LEAD_MANAGEMENT=OFF + MAX_ACTIVE_LEADS=500 → rejected
+- A2: EXAM_TEST_MANAGEMENT=OFF + MAX_EXAMS_PER_MONTH=10 → rejected
+- A3: SMS=OFF + MAX_SMS_PER_MONTH=100 → rejected
+- A4: API_ACCESS=OFF + MAX_API_REQUESTS_PER_MONTH=1000 → rejected
+- A5: STUDENT_MANAGEMENT=OFF + MAX_STUDENTS=100 → rejected
+
+**Section B — Limit value semantics with feature ON (3 tests):**
+- B1: SMS=ON + MAX_SMS_PER_MONTH=0 → accepted (no usage)
+- B2: SMS=ON + MAX_SMS_PER_MONTH=null → accepted (unlimited)
+- B3: SMS=ON + MAX_SMS_PER_MONTH=100 → accepted (positive)
+
+**Section C — CORE security protection (3 tests):**
+- C1: TENANT_ISOLATION=OFF → rejected
+- C2: Each mandatory CORE disabled individually → each rejected
+- C3: Missing AUTHENTICATION → rejected
+
+**Section D — Premium feature independence (2 tests):**
+- D1: FEE_MANAGEMENT=ON + ONLINE_FEE_PAYMENT=OFF → accepted
+- D2: ONLINE_FEE_PAYMENT=ON without FEE_MANAGEMENT → accepted
+
+**Section E — Catalog validation (2 tests):**
+- E1: Unknown feature key → rejected
+- E2: Unknown limit key → rejected
+
+### Added — Previously unmounted catalog suite to runner
+
+`tests/services/test-entitlement-catalog.js` (19 tests) — existed
+since `.9` but was not in the master runner. Now CI-enforced:
+- Feature catalog structure (9 CORE, 24 commercial, 13 limits)
+- Unknown / inactive / duplicate feature rejection
+- Mandatory CORE cannot be disabled
+- Missing mandatory feature rejection
+- Limit value type validation (0, null, positive, negative, fractional)
+- Limit requires enabled feature
+- Catalog lookup handles valid/invalid keys
+- Every limit has a supported period
+
+### ⚠️ Documented Discrepancy
+
+The phase plan states "Feature OFF + related limit = 0 → allowed".
+The current implementation **rejects ANY limit entry** (0, null,
+positive) when its required feature is OFF — a fail-closed default
+that is stricter than the plan. Behavior is verified by test A1
+and left unchanged (no code modification). This is the safest
+default for production.
+
+### Tests:
+- 15 new consolidated tests
+- +19 previously-unmounted catalog tests now CI-enforced
+- 537 total tests, 0 failures
+
+### References:
+- Depends on: `.9.2` Feature catalog, `.9.3` Limit catalog, `.9.14` service
+- Parent roadmap: 9 of 10 phases complete (90%)
+- CHANGELOG.md updated
+
+---
 
 ## [32.16.15.16] - 2026-11-09
 

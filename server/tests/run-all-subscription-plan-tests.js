@@ -152,6 +152,18 @@ const TEST_FILES = [
     label: "Plan Version Regression (consolidated)",
     file: "tests/services/test-plan-version-regression.js",
   },
+
+  // 32.16.15.17 — Feature/Limit Change Regression
+  {
+    phase: "32.16.15.17",
+    label: "Entitlement Catalog Validation (existing)",
+    file: "tests/services/test-entitlement-catalog.js",
+  },
+  {
+    phase: "32.16.15.17",
+    label: "Feature-Limit Change Regression",
+    file: "tests/services/test-feature-limit-change-regression.js",
+  },
 ];
 
 
@@ -221,8 +233,7 @@ function runTestFile(relativeFile) {
 
 async function run() {
   console.log("═".repeat(72));
-  console.log("  32.16.15 — Subscription & Entitlement Stack (Phases .9–.16): FULL TEST SUITE");  console.log();
-
+  console.log("  32.16.15 — Subscription & Entitlement Stack (Phases .9–.17): FULL TEST SUITE");
   let totalPassed = 0;
   let totalFailed = 0;
   const results = [];
