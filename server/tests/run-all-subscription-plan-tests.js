@@ -12,6 +12,24 @@ const { spawn } = require("child_process");
 const path = require("path");
 
 const TEST_FILES = [
+  // 32.16.16 — Sprint 1: Class Management
+  {
+    phase: "32.16.16",
+    label: "Class Model",
+    file: "tests/models/test-class-model.js",
+  },
+  {
+    phase: "32.16.16",
+    label: "Class Service",
+    file: "tests/services/test-class-service.js",
+  },
+  {
+    phase: "32.16.16",
+    label: "Class Routes",
+    file: "tests/api/test-class-routes.js",
+  },
+
+  // 32.16.15 — Milestone (phases .9–.18)
   // .13 — Institute read-only boundary
   {
     phase: "32.16.15.9.13",
@@ -240,7 +258,7 @@ function runTestFile(relativeFile) {
 
 async function run() {
   console.log("═".repeat(72));
-  console.log("  32.16.15 — Subscription & Entitlement Stack (Phases .9–.18): FULL TEST SUITE");  let totalPassed = 0;
+  console.log("  32.16.16 — Subscription Limits Enforcement + Class Management: FULL TEST SUITE");  let totalPassed = 0;
   let totalFailed = 0;
   const results = [];
 

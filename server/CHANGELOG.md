@@ -9,6 +9,70 @@ Phases are numbered per the master roadmap (`32.16.15.X`).
 
 ## [Unreleased]
 
+### Sprint 1 — Class Management (32.16.16)
+
+**Date:** 2026-11-09
+
+New feature — Class management with `MAX_CLASSES` limit enforcement.
+This is the first limit fully wired into a real business endpoint.
+
+**Added:**
+
+1. **`models/Class.js`** — Schema with:
+   - `instituteId` (immutable, tenant-scoped)
+   - `name` (2-100 chars, unique per institute)
+   - `description` (max 500)
+   - `classTeacherId` (optional, must be active teacher of same institute)
+   - `capacity` (informational, positive int or null)
+   - `sortOrder` (custom display order)
+   - `isActive`, `isDeleted`
+   - Audit fields (createdBy, updatedBy, timestamps)
+   - Delete protection (throw on all delete operations)
+   - 3 indexes (unique name per institute, active list, ordered list)
+   - 13 model tests
+
+2. **`services/counters/classCounter.js`** — `MAX_CLASSES` counter:
+   - Counts non-deleted classes per institute
+   - Does not free on `isActive: false` (prevents abuse)
+   - Registered in `services/counters/index.js`
+
+3. **`services/classService.js`** — Business logic:
+   - `createClass()` — atomic transaction with `reserveLimit(MAX_CLASSES)`
+   - `listClasses()` — tenant-scoped
+   - `updateClass()` — no counter change on update
+   - 18 service tests
+
+4. **`controllers/classController.js`** — HTTP handlers
+5. **`validators/classValidator.js`** — Input validation
+6. **`routes/classRoutes.js`** — 3 endpoints:
+   - `POST /api/owner/classes` (requires `CLASS_CREATE`)
+   - `GET /api/owner/classes` (requires `CLASS_READ`)
+   - `PATCH /api/owner/classes/:classId` (requires `CLASS_UPDATE`)
+   - 14 route tests
+
+7. **New permission keys** in catalog:
+   - `CLASS_READ`, `CLASS_CREATE`, `CLASS_UPDATE`, `CLASS_ACTIVATE`, `CLASS_DEACTIVATE`
+   - All OPERATIONAL, all delegatable
+   - Seeded to DB (5 created, 58 unchanged)
+
+**Access control:**
+- `INSTITUTE_OWNER`: automatic access (permission middleware bypass)
+- `INSTITUTE_ADMIN`: requires Owner to assign specific `CLASS_*` permission
+- `TEACHER`, `STUDENT`, `PARENT`: 403 denied
+- `SUPER_ADMIN`: bypasses middleware, but service requires institute context
+
+**Limit enforcement:**
+- `createClass` reserves 1 slot from `MAX_CLASSES`
+- `LIMIT_REACHED` returned when plan limit exhausted
+- `FEATURE_DISABLED` when `CLASS_MANAGEMENT` not in subscription
+- Transaction rollback ensures no partial writes on any failure
+- Counter never changes on update
+
+**Tests:** 45 new tests (13 model + 18 service + 14 route)
+**Total:** 552 + 45 = 597 tests, 0 failures
+
+---
+
 ### 🎯 32.16.15 Milestone Complete (2026-11-09)
 
 All 18 phases of the Subscription & Entitlement Stack are complete.
@@ -16,9 +80,19 @@ Total: **552 tests, 0 failures**. Production-ready.
 
 See phase-by-phase breakdown below.
 
-### Pending Phases (from 32.16.15)
+### Pending Phases
 
-_(All 18 phases complete. See [32.16.15 Milestone Complete] below.)_
+**32.16.15** — ✅ All 18 phases complete (see [32.16.15 Milestone Complete] below.)
+
+**32.16.16** — Subscription Limits Enforcement (in progress):
+- Sprint 1 — Class Management ✅ (this release)
+- Sprint 2 — Batch Management (MAX_BATCHES, multiple subject teachers)
+- Sprint 3 — Student + batch assignment (MAX_STUDENTS)
+- Sprint 4 — Teacher/Admin/Parent creates (MAX_TEACHERS, MAX_ADMINS, MAX_PARENTS)
+- Sprint 5 — Dashboard + CI/CD + monitoring
+- Sprint 6 — Final concurrency + upgrade/downgrade + verification
+
+**Deferred to v2:** Exam, Lead, Storage, SMS, Email, WhatsApp, API request limits.
 
 
 ## [32.16.15.18] - 2026-11-09

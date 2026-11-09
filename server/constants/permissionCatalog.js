@@ -172,6 +172,49 @@ const PERMISSION_CATALOG = Object.freeze([
     isDelegatable: true,
   },
 
+  // Class
+  {
+    permissionKey: PERMISSIONS.CLASS_READ,
+    resource: "CLASS",
+    action: "READ",
+    category: PERMISSION_CATEGORIES.OPERATIONAL,
+    description: "View classes",
+    isDelegatable: true,
+  },
+  {
+    permissionKey: PERMISSIONS.CLASS_CREATE,
+    resource: "CLASS",
+    action: "CREATE",
+    category: PERMISSION_CATEGORIES.OPERATIONAL,
+    description: "Create classes",
+    isDelegatable: true,
+  },
+  {
+    permissionKey: PERMISSIONS.CLASS_UPDATE,
+    resource: "CLASS",
+    action: "UPDATE",
+    category: PERMISSION_CATEGORIES.OPERATIONAL,
+    description: "Update classes",
+    isDelegatable: true,
+  },
+  {
+    permissionKey: PERMISSIONS.CLASS_ACTIVATE,
+    resource: "CLASS",
+    action: "ACTIVATE",
+    category: PERMISSION_CATEGORIES.OPERATIONAL,
+    description: "Activate classes",
+    isDelegatable: true,
+  },
+  {
+    permissionKey: PERMISSIONS.CLASS_DEACTIVATE,
+    resource: "CLASS",
+    action: "DEACTIVATE",
+    category: PERMISSION_CATEGORIES.OPERATIONAL,
+    description: "Deactivate classes",
+    isDelegatable: true,
+  },
+
+
   // Batch
   {
     permissionKey: PERMISSIONS.BATCH_READ,
