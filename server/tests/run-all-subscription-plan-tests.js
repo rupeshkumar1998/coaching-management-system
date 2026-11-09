@@ -164,6 +164,13 @@ const TEST_FILES = [
     label: "Feature-Limit Change Regression",
     file: "tests/services/test-feature-limit-change-regression.js",
   },
+
+  // 32.16.15.18 — Final Entitlement Security Regression
+  {
+    phase: "32.16.15.18",
+    label: "Final Entitlement Security Regression",
+    file: "tests/api/test-final-entitlement-security-regression.js",
+  },
 ];
 
 
@@ -233,8 +240,7 @@ function runTestFile(relativeFile) {
 
 async function run() {
   console.log("═".repeat(72));
-  console.log("  32.16.15 — Subscription & Entitlement Stack (Phases .9–.17): FULL TEST SUITE");
-  let totalPassed = 0;
+  console.log("  32.16.15 — Subscription & Entitlement Stack (Phases .9–.18): FULL TEST SUITE");  let totalPassed = 0;
   let totalFailed = 0;
   const results = [];
 

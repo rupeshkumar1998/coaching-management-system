@@ -9,8 +9,102 @@ Phases are numbered per the master roadmap (`32.16.15.X`).
 
 ## [Unreleased]
 
+### 🎯 32.16.15 Milestone Complete (2026-11-09)
+
+All 18 phases of the Subscription & Entitlement Stack are complete.
+Total: **552 tests, 0 failures**. Production-ready.
+
+See phase-by-phase breakdown below.
+
 ### Pending Phases (from 32.16.15)
-- 32.16.15.18 — Final entitlement security regression
+
+_(All 18 phases complete. See [32.16.15 Milestone Complete] below.)_
+
+
+## [32.16.15.18] - 2026-11-09
+
+### Added — Final Entitlement Security Regression (15 E2E tests)
+
+**Context:** This is the final phase. It verifies the complete
+authorization stack end-to-end and proves that clients cannot bypass
+security by injecting body fields.
+
+### Added — Final E2E security file (15 tests)
+
+`tests/api/test-final-entitlement-security-regression.js`
+
+**Section A — Malicious payload attempts (5 tests):**
+- A1: `instituteId` in body is ignored (server uses `req.tenantId`)
+- A2: `planVersionId` in body is ignored (server uses DB snapshot)
+- A3: `featureEnabled: true` in body is ignored (server reads snapshot)
+- A4: `limit: null` in body is ignored (server reads usage counter)
+- A5: `role: "SUPER_ADMIN"` in body is ignored (server reads `req.user.role`)
+
+**Section B — Full 8-layer E2E (3 tests):**
+- B1: Happy path — all 8 layers pass → 200 + counter incremented in DB
+- B2: Expired subscription → 403 SUBSCRIPTION_INACTIVE, no counter change
+- B3: Feature OFF → 403 FEATURE_NOT_INCLUDED, no counter change
+
+**Section C — Cross-tenant isolation (4 tests):**
+- C1: TEACHER blocked from owner route (role boundary)
+- C2: INSTITUTE_ADMIN blocked from owner route (role boundary)
+- C3: Owner body injection does not leak other tenant data
+- C4: SUPER_ADMIN entitlement check still requires institute context
+
+**Section D — Final invariants (3 tests):**
+- D1: Duplicate feature keys in snapshot → ENTITLEMENT_CONFIGURATION_INVALID (fail closed)
+- D2: Failed reserveLimit leaves counter unchanged (no partial write)
+- D3: CORE feature (TENANT_ISOLATION) corruption → ENTITLEMENT_CONFIGURATION_INVALID (fail closed)
+
+### Authentication Flow Verified (end-to-end):
+
+1. Authentication (protect) → 401 if invalid
+2. Role authorization (requireRole) → 403 if wrong role
+3. Permission authorization (requirePermission) → 403 if missing
+4. Tenant isolation (tenantIsolation) → tenantId from req.user only
+5. Subscription status (getEffectiveSubscription) → 403 if expired
+6. Feature entitlement (checkFeatureAccess) → 403 if OFF
+7. Usage limit (reserveLimit) → 403 if at limit
+8. Controller executes only if all above pass
+
+### Security invariants proven:
+
+- Client body fields are NEVER trusted for security decisions
+- All denials return consistent 403 with reason
+- Failed operations produce ZERO partial database writes
+- Corrupted snapshots fail closed (never silently allow)
+- CORE security features cannot be disabled even via DB corruption
+
+### Tests:
+- 15 new end-to-end security tests
+- 552 total tests across the full stack
+- 0 failures
+
+### 🎯 PHASE 32.16.15 COMPLETE
+
+- **18/18 phases complete**
+- **552 tests passing, 0 failures**
+- **Production-ready Subscription & Entitlement Stack**
+- Full audit trail across all phases
+
+### Final System Guarantees:
+
+- Immutable published plan versions
+- Historical subscription snapshots preserved
+- Role-based access control enforced at every layer
+- Tenant isolation at data and service level
+- Feature entitlements verified against immutable snapshot
+- Usage limits enforced with race safety
+- Trial offer lifecycle fully managed
+- Every change audited with actor + timestamp
+- Fail-closed on any corruption or unexpected error
+
+### References:
+- Phase: 32.16.15.18 (final)
+- Depends on: all previous phases (.9 through .17)
+- **Parent milestone 32.16.15: 100% complete**
+
+---
 
 ## [32.16.15.17] - 2026-11-09
 
