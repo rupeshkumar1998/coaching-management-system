@@ -9,6 +9,85 @@ Phases are numbered per the master roadmap (`32.16.15.X`).
 
 ## [Unreleased]
 
+### Sprint 6 — Final Verification (32.16.16)
+
+**Date:** 2026-11-10
+
+Final sprint — concurrency, plan change, and cross-feature regression verification.
+
+**Added — Concurrent Limits HTTP (6A, 8 tests):**
+
+`tests/integration/test-concurrent-limits-http.js`
+
+Verifies race safety at HTTP level (middleware + controller + service + transaction):
+
+- 5 concurrent class creates, MAX_CLASSES=2 → exactly 2 succeed
+- 5 concurrent batch creates, MAX_BATCHES=3 → exactly 3 succeed
+- 5 concurrent student creates, MAX_STUDENTS=2 → exactly 2 succeed
+- 5 concurrent teacher creates, MAX_TEACHERS=2 → exactly 2 succeed
+- 5 concurrent admin creates, MAX_ADMINS=2 → exactly 2 succeed
+- 5 concurrent parent creates, MAX_PARENTS=2 → exactly 2 succeed
+- Concurrent independent limits (classes at limit, admins available) → independent outcomes
+- 4 concurrent at limit-1 (limit=2, current=1) → exactly 1 succeeds
+
+Each test verifies:
+- Success count == limit
+- LIMIT_REACHED count == total - limit
+- Counter.used matches actual DB record count (no orphan)
+
+**Added — Plan Change Impact (6B, 5 tests):**
+
+`tests/integration/test-plan-change-limit-impact.js`
+
+Verifies counter and records survive plan changes:
+
+- Upgrade (limit 2→10): counter preserved, more creates allowed
+- Downgrade (limit 10→2, current=5): new creates blocked, existing records untouched
+- Dashboard shows remaining=0 when current > limit
+- Existing classes untouched after downgrade
+- Subscription _id, snapshotCapturedAt, planVersionId unchanged
+
+Key insight: UsageCounter is keyed by (instituteId, limitKey, period), NOT by subscriptionId — so it survives plan changes.
+
+**Added — Cross-Feature Limits (6C, 6 tests):**
+
+`tests/integration/test-cross-feature-limits.js`
+
+Verifies multi-resource correctness:
+
+- Chain class→batch→student tracks 3 counters independently
+- All 6 resources created → all 6 counters tracked correctly
+- Same email rejected across STUDENT/TEACHER/PARENT (global uniqueness)
+- Failed class create doesn't increment counter (rollback verification)
+- Two institutes — counters and records fully isolated
+- 5 counters at limit, 6th available → only 6th resource creatable
+
+**Tests:** 19 new
+**Total:** 780 + 19 = 799 tests, 0 failures
+
+### 🎯 PHASE 32.16.16 COMPLETE
+
+**All 6 sprints delivered:**
+- Sprint 1 — Class Management + MAX_CLASSES
+- Sprint 2 — Batch Management + MAX_BATCHES
+- Sprint 3 — Student Enrollment + MAX_STUDENTS
+- Sprint 4 — Teacher/Admin/Parent Creates (3 limits)
+- Sprint 5 — Operational Readiness (health, dashboard, logging, env)
+- Sprint 6 — Final Verification (concurrency, plan change, cross-feature)
+
+**All 6 limits enforced atomically:**
+- MAX_CLASSES, MAX_BATCHES, MAX_STUDENTS
+- MAX_TEACHERS, MAX_ADMINS, MAX_PARENTS
+
+**Total for the milestone:**
+- 799 tests passing, 0 failures
+- 6 new models (Class, Batch, UsageCounter + User updates)
+- 6 new services
+- 15+ new endpoints
+- Production-ready limits enforcement system
+
+---
+
 ### Sprint 5 — Operational Readiness (32.16.16)
 
 **Date:** 2026-11-10
@@ -348,7 +427,7 @@ See phase-by-phase breakdown below.
 - Sprint 3 — Student + batch assignment ✅ (released)
 - Sprint 4 — Teacher/Admin/Parent creates ✅ (released)
 - Sprint 5 — Dashboard + Health + Logger ✅ (released; CI/CD deferred)
-- Sprint 6 — Final concurrency + upgrade/downgrade + verification
+- Sprint 6 — Final Verification ✅ (released)
 
 **Deferred to v2:** Exam, Lead, Storage, SMS, Email, WhatsApp, API request limits.
 

@@ -88,6 +88,22 @@ const TEST_FILES = [
     file: "tests/api/test-subscription-usage-routes.js",
   },
 
+    {
+    phase: "32.16.16",
+    label: "Concurrent Limits (HTTP)",
+    file: "tests/integration/test-concurrent-limits-http.js",
+  },
+  {
+    phase: "32.16.16",
+    label: "Plan Change Limit Impact",
+    file: "tests/integration/test-plan-change-limit-impact.js",
+  },
+  {
+    phase: "32.16.16",
+    label: "Cross-Feature Limits",
+    file: "tests/integration/test-cross-feature-limits.js",
+  },
+
   // 32.16.15 — Milestone (phases .9–.18)
   // .13 — Institute read-only boundary
   {
@@ -317,7 +333,7 @@ function runTestFile(relativeFile) {
 
 async function run() {
   console.log("═".repeat(72));
-  console.log("  32.16.16 — Limits Enforcement + Class/Batch/Student/Parent/Teacher/Admin: FULL TEST SUITE");
+  console.log("  32.16.16 — Limits Enforcement + Final Verification: FULL TEST SUITE");
   let totalPassed = 0;
   let totalFailed = 0;
   const results = [];
