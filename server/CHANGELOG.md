@@ -9,6 +9,78 @@ Phases are numbered per the master roadmap (`32.16.15.X`).
 
 ## [Unreleased]
 
+### Sprint 2 — Batch Management (32.16.16)
+
+**Date:** 2026-11-10
+
+New feature — Batch management with `MAX_BATCHES` limit enforcement
+and multiple subject teachers support.
+
+**Added:**
+
+1. **`models/Batch.js`** — Schema with:
+   - `instituteId` (immutable, tenant-scoped)
+   - `classId` (immutable, belongs to one Class)
+   - `name` (unique per class)
+   - `teachers` array (`{teacherId, subject}` — same teacher may
+     teach multiple subjects, but pairs must be unique)
+   - `schedule` (optional: days + start/end time, strict validation)
+   - `status: ACTIVE | INACTIVE`
+   - Audit fields + delete protection
+   - 4 indexes (unique name per class, listing, counter, ordering)
+   - 17 model tests
+
+2. **`services/counters/batchCounter.js`** — `MAX_BATCHES` counter:
+   - Counts non-deleted batches per institute
+   - `status: INACTIVE` does NOT free slot
+   - Registered in `services/counters/index.js`
+   - 6 total counters now (was 5)
+
+3. **`services/batchService.js`** — Business logic:
+   - `createBatch()` — atomic transaction with `reserveLimit(MAX_BATCHES)`
+   - `listBatches({ classId? })` — tenant-scoped, optional filter
+   - `getBatch()` — tenant-scoped
+   - `updateBatch()` — no counter change
+   - `classId` immutable (create new batch to move classes)
+   - 23 service tests
+
+4. **`controllers/batchController.js`** — 4 handlers
+5. **`validators/batchValidator.js`** — Input validation
+6. **`routes/batchRoutes.js`** — 4 endpoints:
+   - `POST /api/owner/batches` (requires `BATCH_CREATE`)
+   - `GET /api/owner/batches?classId=` (requires `BATCH_READ`)
+   - `GET /api/owner/batches/:batchId` (requires `BATCH_READ`)
+   - `PATCH /api/owner/batches/:batchId` (requires `BATCH_UPDATE`)
+   - 22 route tests
+
+**Permissions:** BATCH_* permissions were already in catalog
+(OPERATIONAL, delegatable) since the initial permission seed.
+
+**Access control:**
+- `INSTITUTE_OWNER`: automatic
+- `INSTITUTE_ADMIN`: requires Owner-assigned `BATCH_*` permission
+- `TEACHER/STUDENT/PARENT`: 403 denied
+- `SUPER_ADMIN`: bypasses middleware, service rejects (no tenant)
+
+**Limit enforcement:**
+- `createBatch` reserves 1 slot from `MAX_BATCHES`
+- `LIMIT_REACHED` when plan limit exhausted
+- `FEATURE_DISABLED` when `BATCH_MANAGEMENT` not in subscription
+- Transaction rollback ensures no partial writes
+
+**Validation:**
+- Class must exist and belong to same institute
+- Every teacher must be active TEACHER of same institute
+- `{teacherId, subject}` pairs must be unique
+- Schedule: 1-7 valid days (MON-SUN), HH:MM format, start < end
+- Batch name unique per class
+- `classId` immutable on update
+
+**Tests:** 62 new tests (17 model + 23 service + 22 route)
+**Total:** 597 + 62 = 659 tests, 0 failures
+
+---
+
 ### Sprint 1 — Class Management (32.16.16)
 
 **Date:** 2026-11-09
@@ -85,8 +157,8 @@ See phase-by-phase breakdown below.
 **32.16.15** — ✅ All 18 phases complete (see [32.16.15 Milestone Complete] below.)
 
 **32.16.16** — Subscription Limits Enforcement (in progress):
-- Sprint 1 — Class Management ✅ (this release)
-- Sprint 2 — Batch Management (MAX_BATCHES, multiple subject teachers)
+- Sprint 1 — Class Management ✅ (released)
+- Sprint 2 — Batch Management ✅ (released)
 - Sprint 3 — Student + batch assignment (MAX_STUDENTS)
 - Sprint 4 — Teacher/Admin/Parent creates (MAX_TEACHERS, MAX_ADMINS, MAX_PARENTS)
 - Sprint 5 — Dashboard + CI/CD + monitoring

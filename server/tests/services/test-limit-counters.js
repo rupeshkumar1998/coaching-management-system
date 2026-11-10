@@ -108,10 +108,11 @@ const run = async () => {
     // ==========================================
     // Section A — Registration state (2 tests)
     // ==========================================
-    await test("5 counters registered on module load", async () => {
+    await test("6 counters registered on module load", async () => {
       const registered = limitCounterRegistry.getRegisteredLimitKeys();
       const expected = [
         "MAX_ADMINS",
+        "MAX_BATCHES",
         "MAX_CLASSES",
         "MAX_PARENTS",
         "MAX_STUDENTS",
@@ -123,9 +124,9 @@ const run = async () => {
       );
     });
 
-    await test("8 limits remain unregistered", async () => {
+    await test("7 limits remain unregistered", async () => {
       const pending = limitCounterRegistry.getUnregisteredLimitKeys();
-      assert(pending.length === 8, `Expected 8 pending, got ${pending.length}`);
+      assert(pending.length === 7, `Expected 7 pending, got ${pending.length}`);
       assert(
         pending.includes("MAX_SMS_PER_MONTH"),
         "SMS should be pending"
@@ -363,10 +364,9 @@ const run = async () => {
     );
 
     await test(
-      "All 8 pending limits are consistently unregistered",
+      "All 7 pending limits are consistently unregistered",
       async () => {
         const pending = [
-          "MAX_BATCHES",
           "MAX_ACTIVE_LEADS",
           "MAX_EXAMS_PER_MONTH",
           "MAX_STORAGE_MB",
@@ -393,11 +393,11 @@ const run = async () => {
       registerAllCounters(); // should not throw
 
       const registered = limitCounterRegistry.getRegisteredLimitKeys();
-      assert(registered.length === 5, `Expected 5, got ${registered.length}`);
+      assert(registered.length === 6, `Expected 6, got ${registered.length}`);
     });
 
     await test(
-              "After __resetForTests + registerAllCounters → 5 restored",
+      "After __resetForTests + registerAllCounters → 5 restored",
       async () => {
         const { registerAllCounters } = require("../../services/counters");
 
@@ -409,8 +409,8 @@ const run = async () => {
 
         registerAllCounters();
         assert(
-          limitCounterRegistry.getRegisteredLimitKeys().length === 5,
-          "Registry should have 5 after re-register"
+          limitCounterRegistry.getRegisteredLimitKeys().length === 6,
+          "Registry should have 6 after re-register"
         );
       }
     );

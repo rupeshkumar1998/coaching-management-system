@@ -5,6 +5,7 @@ const teacherCounter = require("./teacherCounter");
 const adminCounter = require("./adminCounter");
 const parentCounter = require("./parentCounter");
 const classCounter = require("./classCounter");
+const batchCounter = require("./batchCounter");
 
 // =========================================================
 // 32.16.15.11 — Counter Bootstrap
@@ -29,6 +30,7 @@ const ALL_COUNTERS = Object.freeze([
   adminCounter,
   parentCounter,
   classCounter,
+  batchCounter,
 ]);
 
 const registerAllCounters = () => {
