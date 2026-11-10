@@ -45,6 +45,22 @@ const TEST_FILES = [
     file: "tests/api/test-batch-routes.js",
   },
 
+    {
+    phase: "32.16.16",
+    label: "User Student Fields",
+    file: "tests/models/test-user-student-fields.js",
+  },
+  {
+    phase: "32.16.16",
+    label: "Student Service",
+    file: "tests/services/test-student-service.js",
+  },
+  {
+    phase: "32.16.16",
+    label: "Student Routes",
+    file: "tests/api/test-student-routes.js",
+  },
+
   // 32.16.15 — Milestone (phases .9–.18)
   // .13 — Institute read-only boundary
   {
@@ -274,7 +290,7 @@ function runTestFile(relativeFile) {
 
 async function run() {
   console.log("═".repeat(72));
-  console.log("  32.16.16 — Limits Enforcement + Class/Batch Management: FULL TEST SUITE");
+  console.log("  32.16.16 — Limits Enforcement + Class/Batch/Student Management: FULL TEST SUITE");
   let totalPassed = 0;
   let totalFailed = 0;
   const results = [];

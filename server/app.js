@@ -62,6 +62,7 @@ const instituteAdminSubscriptionPlanRoutes = require("./routes/instituteAdminSub
 const subscriptionPlanVersionRoutes = require("./routes/subscriptionPlanVersionRoutes");
 const classRoutes = require("./routes/classRoutes");
 const batchRoutes = require("./routes/batchRoutes");
+const studentRoutes = require("./routes/studentRoutes");
 const trialOfferAdminRoutes = require("./routes/trialOfferAdminRoutes");
 const auditLogRoutes = require("./routes/auditLogRoutes");
 
@@ -85,6 +86,7 @@ app.use("/api/admin/available-subscription-plans", instituteAdminSubscriptionPla
 app.use("/api/admin/subscription-plans", subscriptionPlanVersionRoutes);
 app.use("/api/owner/classes", classRoutes);
 app.use("/api/owner/batches", batchRoutes);
+app.use("/api/owner/students", studentRoutes);
 app.use("/api/admin/trial-offer", trialOfferAdminRoutes);
 app.use("/api/admin/audit-logs", auditLogRoutes);
 

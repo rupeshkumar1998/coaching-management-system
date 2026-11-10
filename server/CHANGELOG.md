@@ -9,6 +9,70 @@ Phases are numbered per the master roadmap (`32.16.15.X`).
 
 ## [Unreleased]
 
+### Sprint 3 — Student Enrollment (32.16.16)
+
+**Date:** 2026-11-10
+
+Student enrollment with batch assignment + MAX_STUDENTS enforcement.
+
+**Added — User model changes (2 fields):**
+- `batchId` (ObjectId, nullable, ref Batch, indexed)
+  Only meaningful for role=STUDENT
+- `mustChangePassword` (Boolean, default false)
+  Set to `true` when temp password is auto-generated
+
+**Added — Student service (services/studentService.js):**
+- `createStudent()` — atomic transaction with reserveLimit(MAX_STUDENTS),
+  auto-generates 12-char base64url temp password, hashes it, sets
+  `mustChangePassword: true`
+- `listStudents({ classId?, batchId? })` — filters, tenant-scoped
+- `getStudent()` — derives classId from batchId
+- `updateStudent()` — only name/phone (not email/password/batchId)
+- `assignBatch()` — enroll or reassign to different batch
+- `removeBatch()` — unassign
+- 20 service tests
+
+**Added — HTTP layer (6 endpoints):**
+- `POST /api/owner/students` (STUDENT_CREATE)
+- `GET /api/owner/students?classId=&batchId=` (STUDENT_READ)
+- `GET /api/owner/students/:studentId` (STUDENT_READ)
+- `PATCH /api/owner/students/:studentId` (STUDENT_UPDATE) — name/phone only
+- `PATCH /api/owner/students/:studentId/assign-batch` (STUDENT_UPDATE)
+- `PATCH /api/owner/students/:studentId/remove-batch` (STUDENT_UPDATE)
+- 23 route tests
+
+**Added — Validation chain:**
+- `classId` + `batchId` both mandatory at creation (Q2 decision)
+- Batch must belong to class (BATCH_CLASS_MISMATCH if not)
+- Class must be active, not deleted
+- Batch must be ACTIVE, not deleted
+- Email unique globally
+- Phone: 7-20 chars if provided
+
+**Student model (normalized):**
+- Only `batchId` stored on User
+- `classId` derived via `Batch.classId` at query time
+- No denormalization, single source of truth
+
+**Temp password flow:**
+- 12 chars from `crypto.randomBytes(9).toString("base64")`
+- base64url alphabet (`-` and `_` instead of `+` and `/`)
+- Returned once in create response with warning
+- `mustChangePassword: true` set on user
+- Enforcement (force password change on login) is a future enhancement
+
+**Limit enforcement:**
+- `createStudent` reserves 1 slot from `MAX_STUDENTS` (atomic)
+- `LIMIT_REACHED` at plan limit
+- `FEATURE_DISABLED` when `STUDENT_MANAGEMENT` not in subscription
+- Transaction rollback on any failure → no partial writes
+- Counter unchanged on update/assign/remove
+
+**Tests:** 49 new tests (6 model + 20 service + 23 route)
+**Total:** 659 + 49 = 708 tests, 0 failures
+
+---
+
 ### Sprint 2 — Batch Management (32.16.16)
 
 **Date:** 2026-11-10
@@ -159,7 +223,7 @@ See phase-by-phase breakdown below.
 **32.16.16** — Subscription Limits Enforcement (in progress):
 - Sprint 1 — Class Management ✅ (released)
 - Sprint 2 — Batch Management ✅ (released)
-- Sprint 3 — Student + batch assignment (MAX_STUDENTS)
+- Sprint 3 — Student + batch assignment ✅ (released)
 - Sprint 4 — Teacher/Admin/Parent creates (MAX_TEACHERS, MAX_ADMINS, MAX_PARENTS)
 - Sprint 5 — Dashboard + CI/CD + monitoring
 - Sprint 6 — Final concurrency + upgrade/downgrade + verification

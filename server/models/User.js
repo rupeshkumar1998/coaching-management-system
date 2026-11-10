@@ -85,6 +85,24 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // 32.16.16 Sprint 3 — Student enrollment
+    batchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Batch",
+      default: null,
+      // Only meaningful for role=STUDENT.
+      // Validated at service layer, not schema.
+      index: true,
+    },
+
+    // 32.16.16 Sprint 3 — Temp password flow
+    // When true, user must change password on next login.
+    // Enforcement is a future enhancement in authController.
+    mustChangePassword: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
