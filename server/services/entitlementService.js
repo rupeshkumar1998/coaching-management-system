@@ -5,6 +5,8 @@ const {
   isCoreFeature,
 } = require("../constants/featureCatalog");
 
+const logger = require("../utils/logger");
+
 // =========================================================
 // 32.16.15.10 — Entitlement Service
 //
@@ -246,7 +248,7 @@ const assertFeatureSnapshotUsable = (subscription) => {
   //     (Group C: entitlementService Legacy Behavior)
   // =========================================================
   if (subscription.features === undefined) {
-    console.error(
+    logger.error(
       "[entitlementService] legacy subscription without feature snapshot",
       {
         subscriptionId: String(subscription._id),
@@ -267,7 +269,7 @@ const assertFeatureSnapshotUsable = (subscription) => {
   }
 
   if (!Array.isArray(subscription.features)) {
-    console.error(
+    logger.error(
       "[entitlementService] malformed feature snapshot",
       {
         subscriptionId: String(subscription._id),
@@ -321,7 +323,7 @@ const buildFeatureIndex = (features) => {
     const entry = features[i];
 
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      console.error(
+      logger.error(
         "[entitlementService] malformed feature entry",
         { index: i, entryType: typeof entry }
       );
@@ -332,7 +334,7 @@ const buildFeatureIndex = (features) => {
     }
 
     if (typeof entry.key !== "string" || !entry.key.trim()) {
-      console.error(
+      logger.error(
         "[entitlementService] feature entry has invalid key",
         { index: i, keyType: typeof entry.key, key: entry.key }
       );
@@ -345,7 +347,7 @@ const buildFeatureIndex = (features) => {
     const normalizedKey = entry.key.trim().toUpperCase();
 
     if (index.has(normalizedKey)) {
-      console.error(
+      logger.error(
         "[entitlementService] duplicate feature entry",
         { index: i, key: normalizedKey }
       );
@@ -356,7 +358,7 @@ const buildFeatureIndex = (features) => {
     }
 
     if (typeof entry.enabled !== "boolean") {
-      console.error(
+      logger.error(
         "[entitlementService] feature entry has non-boolean enabled",
         {
           index: i,
@@ -465,7 +467,7 @@ const checkFeatureAccess = async (instituteId, featureKey) => {
     // -----------------------------------------------------
     if (requestedIsCore) {
       if (!isEnabled) {
-        console.error(
+        logger.error(
           "[entitlementService] CORE feature corrupted in subscription snapshot",
           {
             instituteId: validatedInstituteId,
@@ -524,7 +526,7 @@ const checkFeatureAccess = async (instituteId, featureKey) => {
 
     // Unexpected error — never leak internals to the caller,
     // never allow access, always log for observability.
-    console.error(
+    logger.error(
       "[entitlementService] checkFeatureAccess unexpected failure",
       {
         instituteId: String(instituteId),
@@ -588,7 +590,7 @@ const checkFeatureInSubscription = (subscription, featureKey) => {
 
     if (requestedIsCore) {
       if (!isEnabled) {
-        console.error(
+        logger.error(
           "[entitlementService] CORE feature corrupted in subscription snapshot",
           {
             subscriptionId: String(subscription._id),
@@ -639,7 +641,7 @@ const checkFeatureInSubscription = (subscription, featureKey) => {
       };
     }
 
-    console.error(
+    logger.error(
       "[entitlementService] checkFeatureInSubscription unexpected failure",
       {
         subscriptionId: String(subscription?._id || "unknown"),
@@ -762,7 +764,7 @@ const getInstituteEntitlements = async (instituteId) => {
 
   if (subscription.limits !== undefined && subscription.limits !== null) {
     if (!Array.isArray(subscription.limits)) {
-      console.error(
+      logger.error(
         "[entitlementService] malformed limits snapshot",
         {
           subscriptionId: String(subscription._id),

@@ -1,7 +1,11 @@
+const mongoose = require("mongoose");
+
 const {
   LIMIT_CATALOG,
   getLimitDefinition,
 } = require("../constants/limitCatalog");
+
+const logger = require("../utils/logger");
 
 const {
   validateInstituteId,
@@ -242,7 +246,7 @@ const assertLimitsSnapshotUsable = (subscription) => {
   }
 
   if (!Array.isArray(subscription.limits)) {
-    console.error(
+    logger.error(
       "[limitService] malformed limits snapshot",
       {
         subscriptionId: String(subscription._id),
@@ -284,7 +288,7 @@ const buildLimitIndex = (limits) => {
     const entry = limits[i];
 
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      console.error(
+      logger.error(
         "[limitService] malformed limit entry",
         { index: i, entryType: typeof entry }
       );
@@ -295,7 +299,7 @@ const buildLimitIndex = (limits) => {
     }
 
     if (typeof entry.key !== "string" || !entry.key.trim()) {
-      console.error(
+      logger.error(
         "[limitService] limit entry has invalid key",
         { index: i, keyType: typeof entry.key, key: entry.key }
       );
@@ -308,7 +312,7 @@ const buildLimitIndex = (limits) => {
     const normalizedKey = entry.key.trim().toUpperCase();
 
     if (index.has(normalizedKey)) {
-      console.error(
+      logger.error(
         "[limitService] duplicate limit entry",
         { index: i, key: normalizedKey }
       );
@@ -326,7 +330,7 @@ const buildLimitIndex = (limits) => {
         !Number.isSafeInteger(value) ||
         value < 0
       ) {
-        console.error(
+        logger.error(
           "[limitService] limit entry has invalid value",
           {
             index: i,
@@ -928,7 +932,7 @@ const checkLimit = async ({
 
     // Unexpected error — fail closed, log with context,
     // never leak internals to the caller.
-    console.error(
+    logger.error(
       "[limitService] checkLimit unexpected failure",
       {
         instituteId: String(instituteId),
@@ -1178,7 +1182,7 @@ const releaseLimit = async ({
   );
 
   if (!result) {
-    console.warn(
+    logger.warn(
       "[limitService] releaseLimit would go below zero",
       {
         instituteId: String(validatedInstituteId),
@@ -1437,7 +1441,7 @@ const getAllLimitStatuses = async ({ instituteId } = {}) => {
         counterConfig,
       });
     } catch (err) {
-      console.error(
+      logger.error(
         "[limitService] getAllLimitStatuses: usage read failed",
         {
           instituteId: validatedInstituteId,

@@ -45,6 +45,12 @@ app.get("/", (req, res) => {
     },
   });
 });
+
+// 32.16.16 Sprint 5A — Health endpoints (mounted BEFORE rate limiter)
+// So monitoring/load balancers are never rate-limited.
+const healthRoutes = require("./routes/healthRoutes");
+app.use("/health", healthRoutes);
+
 // Existing routes
 const bootstrapRoutes = require("./routes/bootstrapRoutes");
 const authRoutes = require("./routes/authRoutes");
@@ -64,6 +70,7 @@ const classRoutes = require("./routes/classRoutes");
 const batchRoutes = require("./routes/batchRoutes");
 const studentRoutes = require("./routes/studentRoutes");
 const parentRoutes = require("./routes/parentRoutes");
+const subscriptionUsageRoutes = require("./routes/subscriptionUsageRoutes");
 const trialOfferAdminRoutes = require("./routes/trialOfferAdminRoutes");
 const auditLogRoutes = require("./routes/auditLogRoutes");
 
@@ -89,6 +96,7 @@ app.use("/api/owner/classes", classRoutes);
 app.use("/api/owner/batches", batchRoutes);
 app.use("/api/owner/students", studentRoutes);
 app.use("/api/owner/parents", parentRoutes);
+app.use("/api/owner/subscription-usage", subscriptionUsageRoutes);
 app.use("/api/admin/trial-offer", trialOfferAdminRoutes);
 app.use("/api/admin/audit-logs", auditLogRoutes);
 

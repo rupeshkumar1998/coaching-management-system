@@ -9,6 +9,73 @@ Phases are numbered per the master roadmap (`32.16.15.X`).
 
 ## [Unreleased]
 
+### Sprint 5 — Operational Readiness (32.16.16)
+
+**Date:** 2026-11-10
+
+Production-hardening: health checks, usage dashboard, structured logging, env validation.
+
+**Added — Health endpoints (5A):**
+
+`routes/healthRoutes.js` mounted at `/health` (before rate limiter):
+
+- `GET /health` — Liveness probe
+  * Always 200 if server responds
+  * Returns `{ status, timestamp, uptime, environment }`
+  * Does NOT check dependencies (correct liveness semantics)
+
+- `GET /health/ready` — Readiness probe
+  * 200 if MongoDB ping succeeds
+  * 503 otherwise
+  * Returns `{ status, checks: { database }, timestamp }`
+
+**Added — Subscription Usage Dashboard (5B):**
+
+`GET /api/owner/subscription-usage`
+
+- Returns current usage vs limit for all 13 catalog limits
+- Uses existing `limitService.getAllLimitStatuses()`
+- Response includes `subscription` metadata + `limits[]` array
+- Access: OWNER automatic, ADMIN requires `DASHBOARD_READ`, others 403
+- 10 new tests in `test-subscription-usage-routes.js`
+
+**Added — Structured Logger (5C):**
+
+`utils/logger.js` — dependency-free structured logger:
+
+- Levels: error, warn, info, debug
+- JSON lines in production, human-readable in dev
+- Respects `LOG_LEVEL` env var
+- Default: debug (non-prod), info (prod)
+
+Replaced `console.error` / `console.warn` with `logger.*` in:
+- `services/entitlementService.js`
+- `services/limitService.js`
+- `services/subscriptionService.js`
+
+Foundation for future services — new code should use `logger` directly.
+
+**Added — Environment Validation (5D):**
+
+`config/validateEnv.js` — fail-fast on startup:
+
+- Required env vars: `MONGO_URI`, `JWT_SECRET`, `CLIENT_URL`
+- Clear error message + exit(1) if missing
+- Warns if `JWT_SECRET` too short in production
+- Warns if `CLIENT_URL` is localhost in production
+- Called from `server.js` **before** `mongoose.connect()`
+
+`server.js` updated:
+- Removed hardcoded localhost fallback for `MONGO_URI` (was masking config errors)
+- Env validation runs first
+
+Added `.env.example` — template for new developers.
+
+**Tests:** 10 new (subscription usage routes)
+**Total:** 770 + 10 = 780 tests, 0 failures
+
+---
+
 ### Sprint 4 — Teacher / Admin / Parent Creates (32.16.16)
 
 **Date:** 2026-11-10
@@ -280,7 +347,7 @@ See phase-by-phase breakdown below.
 - Sprint 2 — Batch Management ✅ (released)
 - Sprint 3 — Student + batch assignment ✅ (released)
 - Sprint 4 — Teacher/Admin/Parent creates ✅ (released)
-- Sprint 5 — Dashboard + CI/CD + monitoring
+- Sprint 5 — Dashboard + Health + Logger ✅ (released; CI/CD deferred)
 - Sprint 6 — Final concurrency + upgrade/downgrade + verification
 
 **Deferred to v2:** Exam, Lead, Storage, SMS, Email, WhatsApp, API request limits.

@@ -29,7 +29,7 @@ const TEST_FILES = [
     file: "tests/api/test-class-routes.js",
   },
 
-    {
+  {
     phase: "32.16.16",
     label: "Batch Model",
     file: "tests/models/test-batch-model.js",
@@ -45,7 +45,7 @@ const TEST_FILES = [
     file: "tests/api/test-batch-routes.js",
   },
 
-    {
+  {
     phase: "32.16.16",
     label: "User Student Fields",
     file: "tests/models/test-user-student-fields.js",
@@ -61,7 +61,7 @@ const TEST_FILES = [
     file: "tests/api/test-student-routes.js",
   },
 
-    {
+  {
     phase: "32.16.16",
     label: "Owner Admin Limit",
     file: "tests/controllers/test-owner-admin-limit.js",
@@ -80,6 +80,12 @@ const TEST_FILES = [
     phase: "32.16.16",
     label: "Admin Teacher (limit-wired)",
     file: "tests/controllers/test-admin-teacher.js",
+  },
+
+  {
+    phase: "32.16.16",
+    label: "Subscription Usage Routes",
+    file: "tests/api/test-subscription-usage-routes.js",
   },
 
   // 32.16.15 — Milestone (phases .9–.18)
