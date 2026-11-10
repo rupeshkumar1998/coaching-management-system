@@ -9,6 +9,61 @@ Phases are numbered per the master roadmap (`32.16.15.X`).
 
 ## [Unreleased]
 
+### Sprint 4 — Teacher / Admin / Parent Creates (32.16.16)
+
+**Date:** 2026-11-10
+
+Wired 3 remaining limits into existing + new endpoints.
+
+**Modified — Existing Teacher create (controllers/adminTeacherController.js):**
+- Now runs inside a MongoDB transaction
+- Calls `reserveLimit(MAX_TEACHERS)` atomically
+- Handles LIMIT_REACHED / FEATURE_DISABLED / SUBSCRIPTION_INACTIVE (403)
+- Compensating deletes replaced by transaction rollback
+- Tests updated to seed subscription (19/19 pass)
+
+**Modified — Existing Admin create (controllers/ownerAdminController.js):**
+- Now runs inside a MongoDB transaction
+- Calls `reserveLimit(MAX_ADMINS)` atomically
+- Handles LIMIT_REACHED / FEATURE_DISABLED / SUBSCRIPTION_INACTIVE (403)
+- New test file: `tests/controllers/test-owner-admin-limit.js` (10 tests)
+
+**Added — Parent create (new feature):**
+
+*services/parentService.js:*
+- `createParent()` — atomic transaction with reserveLimit(MAX_PARENTS)
+- `listParents()`, `getParent()`, `updateParent()` — tenant-scoped
+- Only name/phone updatable (email/password immutable)
+- 14 service tests
+
+*controllers/parentController.js + validators/parentValidator.js + routes/parentRoutes.js:*
+- `POST /api/owner/parents` (PARENT_CREATE)
+- `GET /api/owner/parents` (PARENT_READ)
+- `GET /api/owner/parents/:parentId` (PARENT_READ)
+- `PATCH /api/owner/parents/:parentId` (PARENT_UPDATE)
+- 19 route tests
+
+**Parent role clarification:**
+- Currently reserved for future parent-student link + login
+- Users can be registered + seat reserved (limit enforced)
+- No login / no student link / no features yet
+- `parentId` / `childIds` field is a future milestone
+
+**Limit enforcement now complete:**
+- MAX_STUDENTS (Sprint 3)
+- MAX_TEACHERS (Sprint 4)
+- MAX_ADMINS (Sprint 4)
+- MAX_PARENTS (Sprint 4)
+- MAX_CLASSES (Sprint 1)
+- MAX_BATCHES (Sprint 2)
+
+**All 6 limits enforced atomically, race-safe, transaction-rolled back.**
+
+**Tests:** 39 new tests (10 owner admin limit + 14 parent service + 19 parent routes + updated 19 admin teacher)
+**Total:** 708 + 39 = 747 tests, 0 failures
+
+---
+
 ### Sprint 3 — Student Enrollment (32.16.16)
 
 **Date:** 2026-11-10
@@ -224,7 +279,7 @@ See phase-by-phase breakdown below.
 - Sprint 1 — Class Management ✅ (released)
 - Sprint 2 — Batch Management ✅ (released)
 - Sprint 3 — Student + batch assignment ✅ (released)
-- Sprint 4 — Teacher/Admin/Parent creates (MAX_TEACHERS, MAX_ADMINS, MAX_PARENTS)
+- Sprint 4 — Teacher/Admin/Parent creates ✅ (released)
 - Sprint 5 — Dashboard + CI/CD + monitoring
 - Sprint 6 — Final concurrency + upgrade/downgrade + verification
 

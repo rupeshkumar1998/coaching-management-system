@@ -4,6 +4,7 @@ const User = require("../models/User");
 const Teacher = require("../models/Teacher");
 const Institute = require("../models/Institute");
 const { hashPassword } = require("../services/authService");
+const { reserveLimit } = require("../services/limitService");
 
 const validateTeacherId = (teacherId, res) => {
   if (!mongoose.isValidObjectId(teacherId)) {
@@ -118,43 +119,101 @@ const createTeacher = async (req, res) => {
     // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Create User account
-    const teacherUser = await User.create({
-      instituteId: req.tenantId,
-      name: name.trim(),
-      email: normalizedEmail,
-      phone: phone ? phone.trim() : null,
-      password: hashedPassword,
-      role: "TEACHER",
-      accountStatus: "ACTIVE",
-      isActive: true,
-    });
-
-    // Create Teacher profile
-    let teacherProfile;
+    // 32.16.16 Sprint 4A — Atomic transaction with MAX_TEACHERS limit
+    const session = await mongoose.startSession();
+    let teacherUser = null;
+    let teacherProfile = null;
 
     try {
-      teacherProfile = await Teacher.create({
-        userId: teacherUser._id,
-        instituteId: req.tenantId,
-        employeeId: normalizedEmployeeId,
-        qualification: qualification ? qualification.trim() : null,
-        specialization: specialization
-          ? specialization.trim()
-          : null,
-        experienceYears:
-          experienceYears !== undefined ? experienceYears : 0,
-        joiningDate: joiningDate || null,
-        subjects: Array.isArray(subjects) ? subjects : [],
-        bio: bio ? bio.trim() : null,
-        salary: salary !== undefined ? salary : null,
-        employmentType: employmentType || "FULL_TIME",
-        status: "ACTIVE",
+      await session.withTransaction(async () => {
+        // Reserve limit slot (atomic, race-safe)
+        await reserveLimit({
+          instituteId: req.tenantId,
+          limitKey: "MAX_TEACHERS",
+          incrementBy: 1,
+          session,
+        });
+
+        [teacherUser] = await User.create(
+          [
+            {
+              instituteId: req.tenantId,
+              name: name.trim(),
+              email: normalizedEmail,
+              phone: phone ? phone.trim() : null,
+              password: hashedPassword,
+              role: "TEACHER",
+              accountStatus: "ACTIVE",
+              isActive: true,
+            },
+          ],
+          { session }
+        );
+
+        [teacherProfile] = await Teacher.create(
+          [
+            {
+              userId: teacherUser._id,
+              instituteId: req.tenantId,
+              employeeId: normalizedEmployeeId,
+              qualification: qualification ? qualification.trim() : null,
+              specialization: specialization
+                ? specialization.trim()
+                : null,
+              experienceYears:
+                experienceYears !== undefined ? experienceYears : 0,
+              joiningDate: joiningDate || null,
+              subjects: Array.isArray(subjects) ? subjects : [],
+              bio: bio ? bio.trim() : null,
+              salary: salary !== undefined ? salary : null,
+              employmentType: employmentType || "FULL_TIME",
+              status: "ACTIVE",
+            },
+          ],
+          { session }
+        );
       });
     } catch (error) {
-      // Rollback User if Teacher profile creation fails
-      await User.findByIdAndDelete(teacherUser._id);
+      // Transaction auto-rolled back by MongoDB
+      if (error.code === 11000) {
+        // Could be User email OR Teacher employeeId — check which
+        if (String(error.keyPattern?.email)) {
+          return res.status(409).json({
+            success: false,
+            message: "Email already exists",
+          });
+        }
+        if (String(error.keyPattern?.employeeId)) {
+          return res.status(409).json({
+            success: false,
+            message: "Employee ID already exists in this institute",
+          });
+        }
+      }
+      if (error.code === "LIMIT_REACHED") {
+        return res.status(403).json({
+          success: false,
+          code: "LIMIT_REACHED",
+          message: error.message,
+        });
+      }
+      if (error.code === "FEATURE_DISABLED") {
+        return res.status(403).json({
+          success: false,
+          code: "FEATURE_DISABLED",
+          message: error.message,
+        });
+      }
+      if (error.code === "SUBSCRIPTION_INACTIVE") {
+        return res.status(403).json({
+          success: false,
+          code: "SUBSCRIPTION_INACTIVE",
+          message: error.message,
+        });
+      }
       throw error;
+    } finally {
+      await session.endSession();
     }
 
     return res.status(201).json({

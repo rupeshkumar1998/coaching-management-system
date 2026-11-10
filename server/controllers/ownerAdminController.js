@@ -2,6 +2,7 @@
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const { hashPassword } = require("../services/authService");
+const { reserveLimit } = require("../services/limitService");
 
 // ==========================================
 // 32.16.9 — Owner Creates Institute Admin
@@ -137,17 +138,59 @@ if (unexpectedFields.length > 0) {
     // 6. Hash password
     const hashedPassword = await hashPassword(password);
 
-    // 7. Create Admin for verified institute only
-    const admin = await User.create({
-      instituteId: req.tenantId,
-      name: normalizedName,
-      email: normalizedEmail,
-      phone: normalizedPhone,
-      password: hashedPassword,
-      role: "INSTITUTE_ADMIN",
-      accountStatus: "ACTIVE",
-      isActive: true,
-    });
+    // 7. 32.16.16 Sprint 4B — Atomic transaction with MAX_ADMINS limit
+    const session = await mongoose.startSession();
+    let admin = null;
+
+    try {
+      await session.withTransaction(async () => {
+        // Reserve limit slot (atomic, race-safe)
+        await reserveLimit({
+          instituteId: req.tenantId,
+          limitKey: "MAX_ADMINS",
+          incrementBy: 1,
+          session,
+        });
+
+        [admin] = await User.create(
+          [
+            {
+              instituteId: req.tenantId,
+              name: normalizedName,
+              email: normalizedEmail,
+              phone: normalizedPhone,
+              password: hashedPassword,
+              role: "INSTITUTE_ADMIN",
+              accountStatus: "ACTIVE",
+              isActive: true,
+            },
+          ],
+          { session }
+        );
+      });
+    } catch (error) {
+      // Transaction auto-rolled back
+      if (error.code === 11000) {
+        return res.status(409).json({
+          success: false,
+          message: "Email already exists",
+        });
+      }
+      if (
+        error.code === "LIMIT_REACHED" ||
+        error.code === "FEATURE_DISABLED" ||
+        error.code === "SUBSCRIPTION_INACTIVE"
+      ) {
+        return res.status(403).json({
+          success: false,
+          code: error.code,
+          message: error.message,
+        });
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
 
     // 8. Safe response
     return res.status(201).json({

@@ -7,6 +7,10 @@ const connectTestDB = require("../helpers/connectTestDB");
 const User = require("../../models/User");
 const Institute = require("../../models/Institute");
 const Teacher = require("../../models/Teacher");
+const Subscription = require("../../models/Subscription");
+const SubscriptionPlan = require("../../models/SubscriptionPlan");
+const SubscriptionPlanVersion = require("../../models/SubscriptionPlanVersion");
+const { getMandatoryFeatureKeys } = require("../../constants/featureCatalog");
 
 const {
     createTeacher,
@@ -28,6 +32,9 @@ const marker = `teacher-test-${Date.now()}`;
 const testEmail = (label) => `${marker}-${label}@example.test`;
 
 const createdInstituteIds = [];
+const createdSubscriptionIds = [];
+const createdPlanIds = [];
+const createdVersionIds = [];
 
 let passed = 0;
 let failed = 0;
@@ -94,6 +101,70 @@ const createInstitute = async (label) => {
     });
 
     createdInstituteIds.push(institute._id);
+
+    // 32.16.16 Sprint 4A — Create subscription so reserveLimit(MAX_TEACHERS) works
+    const actorId = new mongoose.Types.ObjectId();
+    const planId = new mongoose.Types.ObjectId();
+    const versionId = new mongoose.Types.ObjectId();
+
+    await SubscriptionPlan.collection.insertOne({
+        _id: planId,
+        code: `TT_${marker.replace(/[^a-zA-Z0-9]/g, "").slice(-8).toUpperCase()}_${label}`.slice(0, 50),
+        name: "Teacher Test Plan",
+        description: "",
+        isActive: true,
+        currentPublishedVersion: versionId,
+        createdBy: actorId,
+        updatedBy: actorId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+    });
+    createdPlanIds.push(planId);
+
+    const features = getMandatoryFeatureKeys().map((k) => ({ key: k, enabled: true }));
+    features.push({ key: "TEACHER_MANAGEMENT", enabled: true });
+
+    await SubscriptionPlanVersion.collection.insertOne({
+        _id: versionId,
+        planId,
+        version: 1,
+        status: "PUBLISHED",
+        amount: 0,
+        currency: "INR",
+        durationDays: 30,
+        paymentRequired: false,
+        features,
+        limits: [{ key: "MAX_TEACHERS", value: 1000 }],
+        publishedAt: new Date(),
+        publishedBy: actorId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+    });
+    createdVersionIds.push(versionId);
+
+    const now = Date.now();
+    const subId = new mongoose.Types.ObjectId();
+    await Subscription.collection.insertOne({
+        _id: subId,
+        instituteId: institute._id,
+        subscriptionType: "STANDARD",
+        plan: "FREE",
+        planVersion: 1,
+        planVersionId: versionId,
+        amount: 0,
+        currency: "INR",
+        paymentRequired: false,
+        durationDays: 30,
+        status: "ACTIVE",
+        startDate: new Date(now - 86400000),
+        endDate: new Date(now + 86400000 * 30),
+        features,
+        limits: [{ key: "MAX_TEACHERS", value: 1000 }],
+        snapshotCapturedAt: new Date(now),
+        createdAt: new Date(now),
+        updatedAt: new Date(now),
+    });
+    createdSubscriptionIds.push(subId);
 
     return institute;
 };
@@ -609,6 +680,25 @@ const run = async () => {
         try {
             // Cleanup only records created by this test run.
             if (mongoose.connection.readyState === 1) {
+                // Cleanup order: subscription -> version -> plan -> teacher -> user -> institute
+                if (createdSubscriptionIds.length > 0) {
+                    await Subscription.collection.deleteMany({
+                        _id: { $in: createdSubscriptionIds },
+                    });
+                }
+
+                if (createdVersionIds.length > 0) {
+                    await SubscriptionPlanVersion.collection.deleteMany({
+                        _id: { $in: createdVersionIds },
+                    });
+                }
+
+                if (createdPlanIds.length > 0) {
+                    await SubscriptionPlan.collection.deleteMany({
+                        _id: { $in: createdPlanIds },
+                    });
+                }
+
                 if (createdInstituteIds.length > 0) {
                     await Teacher.deleteMany({
                         instituteId: { $in: createdInstituteIds },
@@ -636,7 +726,8 @@ const run = async () => {
         }
 
         console.log("\n================================");
-        console.log(`Teacher Controller Tests: ${passed} passed, ${failed} failed`);
+        console.log(`Passed: ${passed}`);
+        console.log(`Failed: ${failed}`);
         console.log("================================");
 
         if (failed > 0) {

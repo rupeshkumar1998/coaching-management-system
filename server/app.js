@@ -63,6 +63,7 @@ const subscriptionPlanVersionRoutes = require("./routes/subscriptionPlanVersionR
 const classRoutes = require("./routes/classRoutes");
 const batchRoutes = require("./routes/batchRoutes");
 const studentRoutes = require("./routes/studentRoutes");
+const parentRoutes = require("./routes/parentRoutes");
 const trialOfferAdminRoutes = require("./routes/trialOfferAdminRoutes");
 const auditLogRoutes = require("./routes/auditLogRoutes");
 
@@ -87,6 +88,7 @@ app.use("/api/admin/subscription-plans", subscriptionPlanVersionRoutes);
 app.use("/api/owner/classes", classRoutes);
 app.use("/api/owner/batches", batchRoutes);
 app.use("/api/owner/students", studentRoutes);
+app.use("/api/owner/parents", parentRoutes);
 app.use("/api/admin/trial-offer", trialOfferAdminRoutes);
 app.use("/api/admin/audit-logs", auditLogRoutes);
 
