@@ -211,6 +211,7 @@ const markTeacherAttendance = async (req, res) => {
       "ABSENT",
       "HALF_DAY",
       "LEAVE",
+      "LATE",
     ];
 
     if (!allowedStatuses.includes(status)) {
@@ -295,8 +296,8 @@ const markTeacherAttendance = async (req, res) => {
       status,
       remarks:
         remarks === undefined ||
-        remarks === null ||
-        remarks.trim() === ""
+          remarks === null ||
+          remarks.trim() === ""
           ? null
           : remarks.trim(),
 
@@ -450,6 +451,7 @@ const getTeacherAttendance = async (req, res) => {
         "ABSENT",
         "HALF_DAY",
         "LEAVE",
+        "LATE",
       ];
 
       if (!allowedStatuses.includes(status)) {
@@ -725,6 +727,7 @@ const updateTeacherAttendance = async (req, res) => {
       "ABSENT",
       "HALF_DAY",
       "LEAVE",
+      "LATE",
     ];
 
     if (status !== undefined && !allowedStatuses.includes(status)) {
@@ -805,7 +808,7 @@ const deleteTeacherAttendance = async (req, res) => {
     // const { reason } = req.body;
     const { attendanceId } = req.params;
     const { reason } = req.body || {};
-    
+
 
     if (!req.tenantId) {
       return res.status(403).json({
@@ -1050,31 +1053,31 @@ const getTeacherAttendanceSummary = async (req, res) => {
     //   }
     // }
     let startDate = null;
-let endDate = null;
+    let endDate = null;
 
-if (from && to) {
-  if (
-    typeof from !== "string" ||
-    typeof to !== "string" ||
-    !isValidCalendarDate(from) ||
-    !isValidCalendarDate(to)
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: "Dates must be valid YYYY-MM-DD dates",
-    });
-  }
+    if (from && to) {
+      if (
+        typeof from !== "string" ||
+        typeof to !== "string" ||
+        !isValidCalendarDate(from) ||
+        !isValidCalendarDate(to)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Dates must be valid YYYY-MM-DD dates",
+        });
+      }
 
-  if (from > to) {
-    return res.status(400).json({
-      success: false,
-      message: "From date cannot be after to date",
-    });
-  }
+      if (from > to) {
+        return res.status(400).json({
+          success: false,
+          message: "From date cannot be after to date",
+        });
+      }
 
-  startDate = from;
-  endDate = to;
-}
+      startDate = from;
+      endDate = to;
+    }
 
 
 
@@ -1112,8 +1115,8 @@ if (from && to) {
     // }
     if (startDate && endDate) {
       matchStage.attendanceDate = {
-      $gte: startDate,
-      $lte: endDate,
+        $gte: startDate,
+        $lte: endDate,
       };
     }
 
@@ -1137,6 +1140,7 @@ if (from && to) {
       ABSENT: 0,
       HALF_DAY: 0,
       LEAVE: 0,
+      LATE: 0,
     };
 
     for (const item of summary) {
@@ -1149,7 +1153,8 @@ if (from && to) {
       counts.PRESENT +
       counts.ABSENT +
       counts.HALF_DAY +
-      counts.LEAVE;
+      counts.LEAVE +
+      counts.LATE;
 
     return res.status(200).json({
       success: true,
@@ -1171,6 +1176,7 @@ if (from && to) {
           absent: counts.ABSENT,
           halfDay: counts.HALF_DAY,
           leave: counts.LEAVE,
+          late: counts.LATE,
         },
       },
     });
