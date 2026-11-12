@@ -12,6 +12,19 @@ const { spawn } = require("child_process");
 const path = require("path");
 
 const TEST_FILES = [
+
+    // 32.16.17.6 - Teacher Permission Boundary
+  {
+    phase: "32.16.17.6",
+    label: "Permission Middleware (Teacher)",
+    file: "tests/permissions/test-permission-middleware-teacher.js",
+  },
+  {
+    phase: "32.16.17.6",
+    label: "Permission Service (Teacher)",
+    file: "tests/services/test-permission-service-teacher.js",
+  },
+
   // 32.16.16 — Sprint 1: Class Management
   {
     phase: "32.16.16",

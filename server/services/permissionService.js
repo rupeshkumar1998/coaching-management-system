@@ -204,6 +204,38 @@ const validateAdminForInstitute = async (userId, instituteId) => {
 
 
 /*
+ * Verify that the target user is an active Teacher
+ * belonging to the requested institute.
+ */
+const validateTeacherForInstitute = async (userId, instituteId) => {
+  if (
+    !mongoose.Types.ObjectId.isValid(userId) ||
+    !mongoose.Types.ObjectId.isValid(instituteId)
+  ) {
+    throw new Error("Invalid user ID or institute ID");
+  }
+
+  const user = await User.findOne({
+    _id: userId,
+    instituteId,
+    role: "TEACHER",
+    isDeleted: false,
+  });
+
+  if (!user) {
+    throw new Error(
+      "Target user is not a valid Teacher for this institute"
+    );
+  }
+
+  if (!user.isActive || user.accountStatus !== "ACTIVE") {
+    throw new Error("Target Teacher is not active");
+  }
+
+  return user;
+};
+
+/*
  * Grant one permission to one Institute Admin.
  */
 // const grantPermissionToAdmin = async ({
@@ -322,7 +354,7 @@ const grantPermissionToAdmin = async ({
   //     "This permission cannot be delegated"
   //   );
   // }
-    // Reject inactive permissions with a specific error first.
+  // Reject inactive permissions with a specific error first.
   if (!permission.isActive) {
     throw new Error("Permission is inactive");
   }
@@ -371,6 +403,103 @@ const grantPermissionToAdmin = async ({
 };
 
 
+/*
+ * Grant one ATTENDANCE permission to one Teacher.
+ *
+ * Defense-in-depth: even if a non-ATTENDANCE permission
+ * is passed, this function refuses to create the mapping.
+ */
+const grantPermissionToTeacher = async ({
+  userId,
+  instituteId,
+  permissionKey,
+  grantedBy,
+}) => {
+  if (
+    !mongoose.Types.ObjectId.isValid(userId) ||
+    !mongoose.Types.ObjectId.isValid(instituteId) ||
+    !mongoose.Types.ObjectId.isValid(grantedBy)
+  ) {
+    throw new Error("Invalid user, institute, or grantor ID");
+  }
+
+  const grantor = await User.findOne({
+    _id: grantedBy,
+    instituteId,
+    role: "INSTITUTE_OWNER",
+    isDeleted: false,
+  });
+
+  if (!grantor) {
+    throw new Error("Only the Institute Owner can grant permissions");
+  }
+
+  if (!grantor.isActive || grantor.accountStatus !== "ACTIVE") {
+    throw new Error("Institute Owner account is not active");
+  }
+
+  const teacher = await validateTeacherForInstitute(
+    userId,
+    instituteId
+  );
+
+  const permission = await Permission.findOne({
+    permissionKey: permissionKey.toUpperCase(),
+  });
+
+  if (!permission) {
+    throw new Error("Permission not found");
+  }
+
+  if (permission.resource !== "ATTENDANCE") {
+    throw new Error(
+      "Teachers can only be assigned attendance permissions"
+    );
+  }
+
+  if (!permission.isActive) {
+    throw new Error("Permission is inactive");
+  }
+
+  if (!canOwnerDelegatePermission(permission)) {
+    throw new Error("This permission cannot be delegated");
+  }
+
+  const existingAssignment = await UserPermission.findOne({
+    userId: teacher._id,
+    instituteId,
+    permissionId: permission._id,
+  });
+
+  if (existingAssignment) {
+    if (existingAssignment.isActive) {
+      throw new Error("Permission is already assigned");
+    }
+
+    existingAssignment.isActive = true;
+    existingAssignment.grantedBy = grantor._id;
+
+    await existingAssignment.save();
+
+    return {
+      assignment: existingAssignment,
+      action: "REACTIVATED",
+    };
+  }
+
+  const assignment = await UserPermission.create({
+    userId: teacher._id,
+    instituteId,
+    permissionId: permission._id,
+    grantedBy: grantor._id,
+    isActive: true,
+  });
+
+  return {
+    assignment,
+    action: "GRANTED",
+  };
+};
 
 /*
  * Revoke one permission from one Institute Admin.
@@ -501,6 +630,78 @@ const revokePermissionFromAdmin = async ({
 };
 
 
+/*
+ * Revoke one ATTENDANCE permission from one Teacher.
+ * Soft revocation via isActive=false.
+ */
+const revokePermissionFromTeacher = async ({
+  userId,
+  instituteId,
+  permissionKey,
+  revokedBy,
+}) => {
+  if (
+    !mongoose.Types.ObjectId.isValid(userId) ||
+    !mongoose.Types.ObjectId.isValid(instituteId) ||
+    !mongoose.Types.ObjectId.isValid(revokedBy)
+  ) {
+    throw new Error("Invalid user, institute, or revoker ID");
+  }
+
+  const revoker = await User.findOne({
+    _id: revokedBy,
+    instituteId,
+    role: "INSTITUTE_OWNER",
+    isDeleted: false,
+  });
+
+  if (!revoker) {
+    throw new Error("Only the Institute Owner can revoke permissions");
+  }
+
+  if (!revoker.isActive || revoker.accountStatus !== "ACTIVE") {
+    throw new Error("Institute Owner account is not active");
+  }
+
+  const teacher = await validateTeacherForInstitute(
+    userId,
+    instituteId
+  );
+
+  const permission = await Permission.findOne({
+    permissionKey: permissionKey.toUpperCase(),
+  });
+
+  if (!permission) {
+    throw new Error("Permission not found");
+  }
+
+  if (permission.resource !== "ATTENDANCE") {
+    throw new Error(
+      "Teachers can only have attendance permissions"
+    );
+  }
+
+  const assignment = await UserPermission.findOne({
+    userId: teacher._id,
+    instituteId,
+    permissionId: permission._id,
+  });
+
+  if (!assignment) {
+    throw new Error("Permission assignment not found");
+  }
+
+  if (!assignment.isActive) {
+    throw new Error("Permission is already revoked");
+  }
+
+  assignment.isActive = false;
+
+  await assignment.save();
+
+  return assignment;
+};
 
 
 /*
@@ -615,6 +816,32 @@ const getEffectivePermissions = async ({
       .map((assignment) => assignment.permissionId);
   }
 
+  // Teacher gets only ATTENDANCE resource permissions
+  if (user.role === "TEACHER") {
+    const assignments = await UserPermission.find({
+      userId: user._id,
+      instituteId,
+      isActive: true,
+    })
+      .populate({
+        path: "permissionId",
+        match: {
+          isActive: true,
+          resource: "ATTENDANCE",
+          category: {
+            $ne: "PLATFORM",
+          },
+        },
+      })
+      .sort({
+        createdAt: -1,
+      });
+
+    return assignments
+      .filter((assignment) => assignment.permissionId)
+      .map((assignment) => assignment.permissionId);
+  }
+
   return [];
 };
 
@@ -627,8 +854,11 @@ module.exports = {
   getAllActivePermissions,
   validateDelegatablePermission,
   validateAdminForInstitute,
+  validateTeacherForInstitute,
   grantPermissionToAdmin,
+  grantPermissionToTeacher,
   revokePermissionFromAdmin,
+  revokePermissionFromTeacher,
   getAdminPermissions,
   getEffectivePermissions,
 };

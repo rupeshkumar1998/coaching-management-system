@@ -3,6 +3,14 @@ const mongoose = require("mongoose");
 const Permission = require("../models/Permission");
 const UserPermission = require("../models/UserPermission");
 
+/*
+ * Roles whose authorization is explicitly assignment-based
+ * (UserPermission lookup required).
+ *
+ * SUPER_ADMIN and INSTITUTE_OWNER bypass this list.
+ */
+const ASSIGNMENT_BASED_ROLES = ["INSTITUTE_ADMIN", "TEACHER"];
+
 const requirePermission = (permissionKey) => {
   return async (req, res, next) => {
     try {
@@ -120,13 +128,15 @@ const requirePermission = (permissionKey) => {
 
         return next();
       }
-
+      
       /*
-       * INSTITUTE_ADMIN
+       * INSTITUTE_ADMIN and TEACHER
        *
-       * Admin access is explicitly assignment-based.
+       * Both roles are explicitly assignment-based.
+       * TEACHER is additionally restricted to the
+       * ATTENDANCE resource (see domain guard below).
        */
-      if (req.user.role !== "INSTITUTE_ADMIN") {
+      if (!ASSIGNMENT_BASED_ROLES.includes(req.user.role)) {
         return res.status(403).json({
           success: false,
           message: "Role is not authorized for this permission",
@@ -143,6 +153,24 @@ const requirePermission = (permissionKey) => {
         return res.status(403).json({
           success: false,
           message: "Institute access denied",
+        });
+      }
+
+      /*
+       * TEACHER domain restriction.
+       *
+       * Teachers may only be authorized for ATTENDANCE
+       * resource permissions. Enforced at runtime so that
+       * a mis-assigned UserPermission can never expand a
+       * teacher's access beyond attendance.
+       */
+      if (
+        req.user.role === "TEACHER" &&
+        permission.resource !== "ATTENDANCE"
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Teachers can only access attendance permissions",
         });
       }
 
