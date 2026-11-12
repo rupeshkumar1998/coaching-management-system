@@ -9,6 +9,95 @@ Phases are numbered per the master roadmap (`32.16.15.X`).
 
 ## [Unreleased]
 
+### 32.16.17 — Attendance Management (in progress)
+
+#### Sub-phase .17.3 — Teacher Attendance: LATE status
+
+**Date:** 2026-11-12
+
+Prepended new attendance status for teacher attendance tracking.
+No new tests — LATE support added to existing model + controller;
+full existing suite re-verified.
+
+**Modified:**
+
+*`models/Attendance.js`:*
+- Added `"LATE"` to `status` enum
+  (now: PRESENT, ABSENT, HALF_DAY, LEAVE, LATE)
+
+*`controllers/teacherAttendanceController.js`:*
+- `markTeacherAttendance()` — added `"LATE"` to `allowedStatuses`
+- `getTeacherAttendance()` — added `"LATE"` to status filter whitelist
+- `updateTeacherAttendance()` — added `"LATE"` to `allowedStatuses`
+- `getTeacherAttendanceSummary()` — added `LATE: 0` to counts,
+  `+ counts.LATE` to total, `late: counts.LATE` to response
+- Whitespace/indentation fixes only (no logic change)
+
+**Tests:** 0 new (existing 799 re-verified)
+**Total:** 799 tests, 0 failures
+
+---
+
+#### Sub-phase .17.4–.17.6 — Teacher Permission Boundary
+
+**Date:** 2026-11-12
+
+Teachers can now be assigned ATTENDANCE_* permissions by the Institute
+Owner. Defense-in-depth: runtime guard in middleware + assign-time guard
+in service. Non-ATTENDANCE permissions are rejected at both layers.
+
+**Added — Middleware TEACHER allowance (.17.4):**
+
+*`middleware/permissionMiddleware.js`:*
+- `ASSIGNMENT_BASED_ROLES = ["INSTITUTE_ADMIN", "TEACHER"]` hoisted
+  to module scope
+- Role gate: allows TEACHER past admin-only restriction
+- Domain guard: TEACHER + `permission.resource !== "ATTENDANCE"`
+  → 403 `"Teachers can only access attendance permissions"`
+- Backward compatible: SUPER_ADMIN, INSTITUTE_OWNER, INSTITUTE_ADMIN
+  paths unchanged
+
+**Added — Service TEACHER support (.17.5):**
+
+*`services/permissionService.js`:*
+- `validateTeacherForInstitute()` — new helper, mirrors admin validator
+- `grantPermissionToTeacher()` — ATTENDANCE-only, owner-gated,
+  rejects non-ATTENDANCE resources, supports REACTIVATED on regrant
+- `revokePermissionFromTeacher()` — soft revocation, ATTENDANCE-only
+- `getEffectivePermissions()` — TEACHER branch returns only
+  ATTENDANCE resource permissions
+- `module.exports` extended with 4 new functions
+
+**Added — Tests (.17.6):**
+
+*`tests/permissions/test-permission-middleware-teacher.js` (6 tests):*
+- T1: TEACHER + ATTENDANCE_MARK assigned → allowed
+- T2: TEACHER + ATTENDANCE_UPDATE assigned → allowed
+- T3: TEACHER + ADMIN_READ assigned → blocked (domain)
+- T4: TEACHER + STUDENT_READ assigned → blocked (domain)
+- T5: TEACHER without assignment → blocked (no assignment)
+- T6: TEACHER + inactive assignment → blocked (inactive)
+
+*`tests/services/test-permission-service-teacher.js` (10 tests / 11 asserts):*
+- Grant ATTENDANCE_MARK → GRANTED
+- Grant ATTENDANCE_UPDATE → GRANTED
+- Duplicate grant → throws "already assigned"
+- Grant STUDENT_READ (non-ATTENDANCE) → throws
+- Admin (non-owner) as grantor → throws "Only the Institute Owner"
+- Admin (non-teacher) as target → throws "not a valid Teacher"
+- Revoke ATTENDANCE_MARK → isActive=false
+- Regrant ATTENDANCE_MARK → REACTIVATED
+- Revoke never-assigned STUDENT_READ → throws
+- `getEffectivePermissions()` returns ATTENDANCE-only (2 asserts)
+
+*`tests/run-all-subscription-plan-tests.js`:*
+- Added 2 entries for 32.16.17.6 test files
+
+**Tests:** 17 new (6 middleware + 11 service asserts)
+**Total:** 799 + 17 = 816 tests, 0 failures
+
+---
+
 ### Sprint 6 — Final Verification (32.16.16)
 
 **Date:** 2026-11-10
@@ -421,7 +510,7 @@ See phase-by-phase breakdown below.
 
 **32.16.15** — ✅ All 18 phases complete (see [32.16.15 Milestone Complete] below.)
 
-**32.16.16** — Subscription Limits Enforcement (in progress):
+**32.16.16** — Subscription Limits Enforcement ✅ (released):
 - Sprint 1 — Class Management ✅ (released)
 - Sprint 2 — Batch Management ✅ (released)
 - Sprint 3 — Student + batch assignment ✅ (released)
@@ -429,8 +518,12 @@ See phase-by-phase breakdown below.
 - Sprint 5 — Dashboard + Health + Logger ✅ (released; CI/CD deferred)
 - Sprint 6 — Final Verification ✅ (released)
 
-**Deferred to v2:** Exam, Lead, Storage, SMS, Email, WhatsApp, API request limits.
+**32.16.17** — Attendance Management (in progress):
+- Sub-phase .17.3 — Teacher Attendance LATE status ✅
+- Sub-phase .17.4–.17.6 — Teacher Permission Boundary ✅
+- Sub-phase .17.7 — StudentAttendance model ⏳ (next)
 
+**Deferred to v2:** Exam, Lead, Storage, SMS, Email, WhatsApp, API request limits.
 
 ## [32.16.15.18] - 2026-11-09
 
