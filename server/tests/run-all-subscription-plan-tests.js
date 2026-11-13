@@ -25,6 +25,29 @@ const TEST_FILES = [
     file: "tests/services/test-permission-service-teacher.js",
   },
 
+    // 32.16.17.7-.13 ΓÇö Student Attendance Management
+  {
+    phase: "32.16.17.7",
+    label: "Student Attendance Model",
+    file: "tests/models/test-student-attendance-model.js",
+  },
+  {
+    phase: "32.16.17.10",
+    label: "Student Attendance Service",
+    file: "tests/services/test-student-attendance-service.js",
+  },
+  {
+    phase: "32.16.17.13",
+    label: "Student Attendance Routes (Admin)",
+    file: "tests/api/test-student-attendance-routes.js",
+  },
+  {
+    phase: "32.16.17.13",
+    label: "Student Attendance Routes (Teacher)",
+    file: "tests/api/test-teacher-student-attendance-routes.js",
+  },
+
+
   // 32.16.16 — Sprint 1: Class Management
   {
     phase: "32.16.16",
@@ -346,7 +369,7 @@ function runTestFile(relativeFile) {
 
 async function run() {
   console.log("═".repeat(72));
-  console.log("  32.16.16 — Limits Enforcement + Final Verification: FULL TEST SUITE");
+  console.log("  Coaching Management — Full Test Suite");
   let totalPassed = 0;
   let totalFailed = 0;
   const results = [];

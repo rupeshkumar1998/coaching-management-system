@@ -73,6 +73,8 @@ const parentRoutes = require("./routes/parentRoutes");
 const subscriptionUsageRoutes = require("./routes/subscriptionUsageRoutes");
 const trialOfferAdminRoutes = require("./routes/trialOfferAdminRoutes");
 const auditLogRoutes = require("./routes/auditLogRoutes");
+const studentAttendanceRoutes = require("./routes/studentAttendanceRoutes");
+const teacherStudentAttendanceRoutes = require("./routes/teacherStudentAttendanceRoutes");
 
 app.use("/api/bootstrap", bootstrapRoutes);
 app.use("/api/auth", authRoutes);
@@ -83,6 +85,7 @@ if (["development", "test"].includes(process.env.NODE_ENV)) {
 app.use("/api/public", publicRegistrationRoutes);
 app.use("/api/admin/institutes", adminInstituteRoutes);
 app.use("/api/admin/teachers", adminTeacherRoutes);
+app.use("/api/teacher/student-attendance", teacherStudentAttendanceRoutes);
 app.use("/api/teacher", teacherRoutes);
 app.use("/api/admin/teacher-attendance", teacherAttendanceRoutes);
 app.use("/api/admin/subjects", subjectRoutes);
@@ -95,6 +98,7 @@ app.use("/api/admin/subscription-plans", subscriptionPlanVersionRoutes);
 app.use("/api/owner/classes", classRoutes);
 app.use("/api/owner/batches", batchRoutes);
 app.use("/api/owner/students", studentRoutes);
+app.use("/api/owner/student-attendance", studentAttendanceRoutes);
 app.use("/api/owner/parents", parentRoutes);
 app.use("/api/owner/subscription-usage", subscriptionUsageRoutes);
 app.use("/api/admin/trial-offer", trialOfferAdminRoutes);

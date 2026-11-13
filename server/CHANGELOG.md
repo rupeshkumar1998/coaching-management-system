@@ -98,6 +98,94 @@ in service. Non-ATTENDANCE permissions are rejected at both layers.
 
 ---
 
+---
+
+#### Sub-phase .17.7–.17.13 — Student Attendance Management
+
+**Date:** 2026-11-13
+
+Student attendance feature end-to-end: model, service, controllers,
+validators, routes, and teacher scoping. Full test coverage.
+
+**Added — Model (`models/StudentAttendance.js`):**
+- Fields: `studentId`, `instituteId`, `batchId` (snapshot of student's
+  current batch at marking time), `attendanceDate` (canonical YYYY-MM-DD),
+  `date` (legacy Date, teacher pattern), `status`
+  (PRESENT/ABSENT/LATE/LEAVE/HALF_DAY), `remarks`, `markedBy`,
+  `markedVia` (MANUAL/QR, default MANUAL), soft-delete fields
+- Unique index: `(instituteId, studentId, attendanceDate)` partial
+  where `isDeleted: false` (re-mark allowed after soft delete)
+- Listing index: `(instituteId, batchId, attendanceDate, isDeleted)`
+
+**Added — Service (`services/studentAttendanceService.js`, 8 + 2):**
+- `markStudentAttendance()` — single mark, transaction
+- `bulkMarkStudentAttendance()` — all-or-nothing bulk insert
+- `listStudentAttendance()` — paginated, filters, `allowedBatchIds` scope
+- `getStudentAttendance()` — populated read
+- `updateStudentAttendance()` — status + remarks only (immutable date/student/batch)
+- `deleteStudentAttendance()` — soft delete (re-mark allowed)
+- `getStudentAttendanceSummary()` — per student, date range
+- `getBatchAttendanceSummary()` — roster view (marked/unmarked)
+- `getTeacherBatchIds()` — teacher's assigned batches (via `Batch.teachers[]`)
+- `assertTeacherOwnsBatch()` — 403 if teacher not assigned
+
+**Added — Middleware (`middleware/requireTeacherProfile.js`):**
+- Resolves `req.teacher` from `req.user._id`
+- 401 if unauthenticated, 403 if role≠TEACHER, no instituteId,
+  no Teacher profile, or Teacher.status ≠ ACTIVE
+
+**Added — Controllers:**
+- `controllers/studentAttendanceController.js` — 8 handlers (admin/owner)
+- `controllers/teacherStudentAttendanceController.js` — 5 handlers (teacher)
+
+**Added — Validators:**
+- `validators/studentAttendanceValidator.js` — 8 chains
+- `validators/teacherStudentAttendanceValidator.js` — 5 chains
+  (reuses admin where identical; PATCH restricts to `remarks` only)
+
+**Added — Routes:**
+- `routes/studentAttendanceRoutes.js` — `/api/owner/student-attendance`
+  - Role gate: INSTITUTE_OWNER / INSTITUTE_ADMIN
+  - Permissions: ATTENDANCE_MARK, READ, UPDATE, CORRECT (delete = SENSITIVE)
+- `routes/teacherStudentAttendanceRoutes.js` — `/api/teacher/student-attendance`
+  - Middleware chain: `protect` → `tenantIsolation` →
+    `requireTeacherProfile` → `requirePermission` (ATTENDANCE-only via .17.4)
+  - Permissions: ATTENDANCE_MARK (bulk/delete), READ (list/summary),
+    UPDATE (PATCH remarks)
+
+**Modified — `app.js`:**
+- Mounted 2 new routes (teacher mount BEFORE `/api/teacher` to preserve
+  sub-path specificity)
+
+**Bug fixes discovered during route tests:**
+1. **Teacher._id vs User._id** — `Batch.teachers[].teacherId` ref is
+   `"User"` (not `"Teacher"`). Teacher controller was passing
+   `req.teacher._id` → never matched. Fixed: `req.user._id`.
+2. **Owner route missing role gate** — TEACHER with `ATTENDANCE_MARK`
+   could hit `/api/owner/student-attendance` (no batch-ownership check
+   on owner path). Fixed: `requireRole("INSTITUTE_OWNER","INSTITUTE_ADMIN")`.
+3. **Aggregation type casting** — Mongoose `.aggregate()` does not cast
+   string → ObjectId. Summary counts returned 0. Fixed: explicit
+   `new mongoose.Types.ObjectId(String(...))` for `instituteId`/`batchId`.
+
+**Design decisions:**
+- `batchId` is a snapshot (immutable after create) — historical record
+  preserved when student moves batch
+- Teacher update = `remarks` only (status change = correction =
+  SENSITIVE = admin-only)
+- Teacher delete = soft delete + re-mark (documented, not silent edit)
+- `markedVia` reserved for future QR integration
+
+**Tests: 51 new**
+- `tests/models/test-student-attendance-model.js` (10)
+- `tests/services/test-student-attendance-service.js` (20)
+- `tests/api/test-student-attendance-routes.js` (12)
+- `tests/api/test-teacher-student-attendance-routes.js` (9)
+
+**Total:** 816 + 51 = 867 tests, 0 failures
+
+---
+
 ### Sprint 6 — Final Verification (32.16.16)
 
 **Date:** 2026-11-10
@@ -521,7 +609,8 @@ See phase-by-phase breakdown below.
 **32.16.17** — Attendance Management (in progress):
 - Sub-phase .17.3 — Teacher Attendance LATE status ✅
 - Sub-phase .17.4–.17.6 — Teacher Permission Boundary ✅
-- Sub-phase .17.7 — StudentAttendance model ⏳ (next)
+- Sub-phase .17.7–.17.13 — Student Attendance Management ✅
+- Sub-phase .17.14 — Final Verification ⏳ (next)
 
 **Deferred to v2:** Exam, Lead, Storage, SMS, Email, WhatsApp, API request limits.
 
