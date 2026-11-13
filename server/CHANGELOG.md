@@ -186,6 +186,45 @@ validators, routes, and teacher scoping. Full test coverage.
 
 ---
 
+#### Sub-phase .17 follow-up  Teacher attendance tests + teacher student summary
+
+**Date:** 2026-11-13
+
+Closes two gaps identified during `.17` production-readiness review:
+1. LATE status (.17.3) was in code but unverified by dedicated tests
+2. Teacher could not view individual student attendance history
+   (only admin/owner could)
+
+**Added ΓÇö Teacher LATE regression tests (4 tests):**
+
+*`tests/api/test-teacher-attendance-late.js`:*
+- T1: Admin marks LATE ΓåÆ 201 (status + attendanceDate verified)
+- T2: Invalid status ΓåÆ 400 (enum guard works with LATE present)
+- T3: Summary includes `late: 1` in counts
+- T4: List `?status=LATE` filter returns only LATE records
+
+**Added ΓÇö Teacher student-summary endpoint:**
+
+*`controllers/teacherStudentAttendanceController.js`:*
+- New `studentSummaryHandler` ΓÇö GET `/api/teacher/student-attendance/summary/student/:studentId`
+- Enforces `assertTeacherOwnsBatch()` ΓÇö 403 if student not in teacher's batch
+
+*`validators/teacherStudentAttendanceValidator.js`:*
+- Reuses `studentSummaryValidator` from admin validator
+
+*`routes/teacherStudentAttendanceRoutes.js`:*
+- New route mounted BEFORE `/:attendanceId` (specific-first order)
+- Permission: `ATTENDANCE_READ`
+
+*`tests/api/test-teacher-student-attendance-routes.js` (2 new tests):*
+- G1: Teacher views own student summary ΓåÆ 200
+- G2: Teacher views student in other batch ΓåÆ 403 TEACHER_NOT_ASSIGNED_TO_BATCH
+
+**Tests:** +6 new (4 LATE + 2 teacher-summary)
+**Total:** 867 + 6 = 873 tests, 0 failures
+
+---
+
 ### Sprint 6 — Final Verification (32.16.16)
 
 **Date:** 2026-11-10
@@ -610,7 +649,7 @@ See phase-by-phase breakdown below.
 - Sub-phase .17.3 — Teacher Attendance LATE status ✅
 - Sub-phase .17.4–.17.6 — Teacher Permission Boundary ✅
 - Sub-phase .17.7–.17.13 — Student Attendance Management ✅
-- Sub-phase .17.14 — Final Verification ⏳ (next)
+- Sub-phase .17 follow-up — Teacher LATE tests + teacher summary ✅
 
 **Deferred to v2:** Exam, Lead, Storage, SMS, Email, WhatsApp, API request limits.
 

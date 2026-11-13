@@ -5,6 +5,7 @@ const {
   deleteStudentAttendance,
   getBatchAttendanceSummary,
   getStudentAttendance,
+  getStudentAttendanceSummary,
   getTeacherBatchIds,
   assertTeacherOwnsBatch,
 } = require("../services/studentAttendanceService");
@@ -296,10 +297,50 @@ const batchSummaryHandler = async (req, res) => {
   }
 };
 
+
+// ---------------------------------------------------------
+// GET /api/teacher/student-attendance/summary/student/:studentId
+// ---------------------------------------------------------
+const studentSummaryHandler = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+
+    const summary = await getStudentAttendanceSummary({
+      instituteId: req.user.instituteId,
+      studentId: req.params.studentId,
+      from: from || undefined,
+      to: to || undefined,
+    });
+
+    if (!summary.student.batchId) {
+      return res.status(403).json({
+        success: false,
+        code: "TEACHER_NOT_ASSIGNED_TO_BATCH",
+        message: "Student is not assigned to any batch",
+      });
+    }
+
+    await assertTeacherOwnsBatch({
+      instituteId: req.user.instituteId,
+      teacherId: req.user._id,
+      batchId: summary.student.batchId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Student attendance summary fetched successfully",
+      data: summary,
+    });
+  } catch (error) {
+    return handleControllerError(res, error, "studentSummary");
+  }
+};
+
 module.exports = {
   bulkMarkHandler,
   listHandler,
   patchRemarksHandler,
   deleteHandler,
+  studentSummaryHandler,
   batchSummaryHandler,
 };

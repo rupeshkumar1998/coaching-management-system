@@ -47,6 +47,11 @@ const TEST_FILES = [
     file: "tests/api/test-teacher-student-attendance-routes.js",
   },
 
+    {
+    phase: "32.16.17.3",
+    label: "Teacher Attendance LATE",
+    file: "tests/api/test-teacher-attendance-late.js",
+  },
 
   // 32.16.16 — Sprint 1: Class Management
   {

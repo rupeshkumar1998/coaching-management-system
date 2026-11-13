@@ -4,6 +4,7 @@ const {
   bulkMarkValidator,
   listValidator,
   deleteValidator,
+  studentSummaryValidator,
   batchSummaryValidator,
 } = require("./studentAttendanceValidator");
 
@@ -62,5 +63,6 @@ module.exports = {
   listValidator,
   patchRemarksValidator,
   deleteValidator,
+  studentSummaryValidator,
   batchSummaryValidator,
 };

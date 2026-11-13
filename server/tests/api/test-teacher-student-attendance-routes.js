@@ -421,6 +421,57 @@ const run = async () => {
       );
     });
 
+        // =====================================================
+    // G  Student summary (teacher scope)
+    // =====================================================
+
+    await test("G1: Teacher views own student summary ΓåÆ 200", async () => {
+      const ctx = await setupTeacher();
+      const markRes = await request("/api/teacher/student-attendance/bulk", {
+        method: "POST",
+        token: ctx.token,
+        body: {
+          batchId: String(ctx.batchId),
+          attendanceDate: today,
+          entries: [{ studentId: String(ctx.studentId), status: "PRESENT" }],
+        },
+      });
+      createdAttendanceIds.push(
+        new mongoose.Types.ObjectId(markRes.data.data.attendance[0].id)
+      );
+
+      const res = await request(
+        `/api/teacher/student-attendance/summary/student/${ctx.studentId}`,
+        { token: ctx.token }
+      );
+      assert(res.status === 200, `expected 200, got ${res.status}`);
+      assert(res.data.data.summary.totalAttendance === 1, "total");
+    });
+
+    await test("G2: Teacher views student in other batch ΓåÆ 403", async () => {
+      const ctx = await setupTeacher();
+      const otherBatchId = await makeBatch(
+        ctx.instituteId,
+        ctx.classId,
+        ctx.ownerId,
+        [],
+        "Batch Other Student"
+      );
+      const otherStudent = await makeUser("STUDENT", ctx.instituteId, {
+        batchId: otherBatchId,
+      });
+
+      const res = await request(
+        `/api/teacher/student-attendance/summary/student/${otherStudent}`,
+        { token: ctx.token }
+      );
+      assert(res.status === 403, `expected 403, got ${res.status}`);
+      assert(
+        res.data.code === "TEACHER_NOT_ASSIGNED_TO_BATCH",
+        `code: ${res.data.code}`
+      );
+    });
+
     // =====================================================
     // F. Status update blocked (validator)
     // =====================================================

@@ -11,6 +11,7 @@ const {
   listValidator,
   patchRemarksValidator,
   deleteValidator,
+  studentSummaryValidator,
   batchSummaryValidator,
 } = require("../validators/teacherStudentAttendanceValidator");
 
@@ -19,6 +20,7 @@ const {
   listHandler,
   patchRemarksHandler,
   deleteHandler,
+  studentSummaryHandler,
   batchSummaryHandler,
 } = require("../controllers/teacherStudentAttendanceController");
 
@@ -61,6 +63,14 @@ router.get(
   batchSummaryValidator,
   validateRequest,
   batchSummaryHandler
+);
+
+router.get(
+  "/summary/student/:studentId",
+  requirePermission("ATTENDANCE_READ"),
+  studentSummaryValidator,
+  validateRequest,
+  studentSummaryHandler
 );
 
 router.get(
