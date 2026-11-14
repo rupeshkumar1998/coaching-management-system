@@ -13,7 +13,13 @@ const path = require("path");
 
 const TEST_FILES = [
 
-    // 32.16.17.6 - Teacher Permission Boundary
+  {
+    phase: "32.16.18a",
+    label: "Student Login Flow",
+    file: "tests/api/test-student-login-flow.js",
+  },
+  
+  // 32.16.17.6 - Teacher Permission Boundary
   {
     phase: "32.16.17.6",
     label: "Permission Middleware (Teacher)",
@@ -25,7 +31,7 @@ const TEST_FILES = [
     file: "tests/services/test-permission-service-teacher.js",
   },
 
-    // 32.16.17.7-.13 ΓÇö Student Attendance Management
+  // 32.16.17.7-.13 ΓÇö Student Attendance Management
   {
     phase: "32.16.17.7",
     label: "Student Attendance Model",
@@ -47,11 +53,12 @@ const TEST_FILES = [
     file: "tests/api/test-teacher-student-attendance-routes.js",
   },
 
-    {
+  {
     phase: "32.16.17.3",
     label: "Teacher Attendance LATE",
     file: "tests/api/test-teacher-attendance-late.js",
   },
+
 
   // 32.16.16 — Sprint 1: Class Management
   {
@@ -129,7 +136,7 @@ const TEST_FILES = [
     file: "tests/api/test-subscription-usage-routes.js",
   },
 
-    {
+  {
     phase: "32.16.16",
     label: "Concurrent Limits (HTTP)",
     file: "tests/integration/test-concurrent-limits-http.js",

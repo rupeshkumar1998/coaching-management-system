@@ -224,6 +224,62 @@ Closes two gaps identified during `.17` production-readiness review:
 **Total:** 867 + 6 = 873 tests, 0 failures
 
 ---
+### 32.16.18a ΓÇö Student Login Flow (Pre-Fees Readiness)
+
+**Date:** 2026-11-14
+
+Closes the temp-password enforcement gap exposed by `createStudent()`
+(`mustChangePassword: true` was set but never checked). Adds the
+minimum student-facing endpoints so future Fees work can be scoped
+correctly from the start.
+
+**Added ΓÇö Middleware (`middleware/requirePasswordChanged.js`):**
+- Blocks access with 403 PASSWORD_CHANGE_REQUIRED when
+  `req.user.mustChangePassword === true`
+- Must run AFTER `protect`
+- `/api/student/me` intentionally bypasses this gate so the frontend
+  can read the flag and redirect to change-password
+
+**Modified ΓÇö `controllers/authController.js`:**
+- `login()` response now includes `mustChangePassword` flag
+- `changePassword()` clears `user.mustChangePassword = false` on success
+
+**Added ΓÇö Student endpoints (`controllers/studentProfileController.js`):**
+- `GET /api/student/me` ΓÇö own profile (bypasses password gate)
+- `GET /api/student/attendance` ΓÇö own attendance (gated)
+- `GET /api/student/attendance/summary` ΓÇö own attendance counts (gated)
+
+**Added ΓÇö Routes (`routes/studentProfileRoutes.js`):**
+- Mounted at `/api/student`
+- Middleware chain: `protect` ΓåÆ `tenantIsolation` ΓåÆ `requireRole("STUDENT")`
+- `/me` bypasses `requirePasswordChanged`; other routes require it
+
+**Modified ΓÇö `app.js`:**
+- Mounted `/api/student`
+
+**Security flow (verified by tests):**
+1. Admin creates student ΓåÆ temp password + `mustChangePassword: true`
+2. Student logs in ΓåÆ response contains `mustChangePassword: true`
+3. Direct access to `/api/student/attendance` ΓåÆ 403 PASSWORD_CHANGE_REQUIRED
+4. `POST /api/auth/change-password` ΓåÆ success ΓåÆ flag cleared
+5. All gated routes now accessible
+
+**Tests: 10 new**
+- `tests/api/test-student-login-flow.js`:
+  - T1: login returns `mustChangePassword=true`
+  - T2: login returns `mustChangePassword=false`
+  - T3: `/me` bypasses password gate
+  - T4: `/me` returns `batchId` + derived `classId`
+  - T5: `/attendance` ΓåÆ 403 PASSWORD_CHANGE_REQUIRED
+  - T6: `/attendance/summary` ΓåÆ 403 PASSWORD_CHANGE_REQUIRED
+  - T7: change-password clears flag; gated route then 200
+  - T8: change-password wrong current ΓåÆ 401
+  - T9: no token on `/me` ΓåÆ 401
+  - T10: non-STUDENT on `/api/student/me` ΓÇÆ 403
+
+**Total:** 873 + 10 = 883 tests, 0 failures
+
+---
 
 ### Sprint 6 — Final Verification (32.16.16)
 
@@ -650,6 +706,8 @@ See phase-by-phase breakdown below.
 - Sub-phase .17.4–.17.6 — Teacher Permission Boundary ✅
 - Sub-phase .17.7–.17.13 — Student Attendance Management ✅
 - Sub-phase .17 follow-up — Teacher LATE tests + teacher summary ✅
+
+- 32.16.18a — Student Login Flow ✅
 
 **Deferred to v2:** Exam, Lead, Storage, SMS, Email, WhatsApp, API request limits.
 

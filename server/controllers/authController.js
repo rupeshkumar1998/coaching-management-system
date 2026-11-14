@@ -111,6 +111,7 @@ if (user.accountStatus !== "ACTIVE" || !user.isActive) {
         email: user.email,
         role: user.role,
         instituteId: user.instituteId,
+        mustChangePassword: user.mustChangePassword === true,
       },
     });
   } catch (error) {
@@ -220,6 +221,7 @@ const changePassword = async (req, res) => {
     const hashedPassword = await hashPassword(newPassword);
 
     user.password = hashedPassword;
+    user.mustChangePassword = false;
     await user.save();
 
     return res.status(200).json({
