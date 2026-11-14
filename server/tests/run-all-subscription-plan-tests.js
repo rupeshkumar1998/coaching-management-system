@@ -13,12 +13,30 @@ const path = require("path");
 
 const TEST_FILES = [
 
+  // 32.16.18 - Fees Management
+  {
+    phase: "32.16.18",
+    label: "Fee Model",
+    file: "tests/models/test-fee-model.js",
+  },
+  {
+    phase: "32.16.18",
+    label: "Fee Routes (Admin)",
+    file: "tests/api/test-fee-routes.js",
+  },
+  {
+    phase: "32.16.18",
+    label: "Fee Routes (Student)",
+    file: "tests/api/test-student-fee-routes.js",
+  },
+
+
   {
     phase: "32.16.18a",
     label: "Student Login Flow",
     file: "tests/api/test-student-login-flow.js",
   },
-  
+
   // 32.16.17.6 - Teacher Permission Boundary
   {
     phase: "32.16.17.6",

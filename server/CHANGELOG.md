@@ -224,6 +224,109 @@ Closes two gaps identified during `.17` production-readiness review:
 **Total:** 867 + 6 = 873 tests, 0 failures
 
 ---
+### 32.16.18 ΓÇö Fees Management
+
+**Date:** 2026-11-14
+
+Complete fee invoicing and payment tracking. Admin/owner creates fee
+invoices (single or bulk per batch), records offline payments (cash,
+UPI, bank), issues refunds, and views a dashboard. Students can view
+their own fees + payment history.
+
+**Added ΓÇö Model (`models/Fee.js`):**
+- Fields: `instituteId`, `studentId`, `batchId` (snapshot), `classId`
+  (snapshot), `cycle` (e.g., "OCT-2026"), `description`, `amount`,
+  `currency`, `dueDate`, `status` (PENDING/PARTIAL/PAID/CANCELLED),
+  `paidAmount`, `notes`, soft-delete fields
+- Unique index: `(instituteId, studentId, cycle, description)` where
+  `isDeleted: false` (allows re-invoicing after soft delete)
+- Listing indexes: per institute, per student, per batch
+- Immutability: `studentId`, `batchId`, `classId`, `cycle`, `amount`,
+  `currency`, `instituteId`, `createdBy` frozen after creation
+- Overdue derived at read time (`dueDate < now` + status PENDING/PARTIAL)
+- `paidAmount > amount` rejected
+- Cancel blocked when `paidAmount > 0`
+
+**Modified ΓÇö `models/Payment.js`:**
+- Added `STUDENT_FEE` to `paymentType` enum
+- Added `feeId` + `studentId` fields (only for STUDENT_FEE)
+- Extended `PROTECTED_PAYMENT_PATHS` (immutability) to include new fields
+- Added `pre("validate")` hook: requires `feeId` + `studentId` for
+  STUDENT_FEE payments
+- Added index: `(instituteId, feeId, status)`
+
+**Added ΓÇö `services/feeService.js` (8 functions):**
+- `createFee` ΓÇö single invoice create (student + batch validated)
+- `bulkCreateFees` ΓÇö one fee per active student in batch (all-or-nothing)
+- `listFees` ΓÇö filters (studentId, batchId, status, cycle, overdue, date
+  range), pagination, `isOverdue` derived
+- `getFee` ΓÇö fee + payment history
+- `updateFee` ΓÇö description, dueDate, notes, status (CANCELLED only)
+- `deleteFee` ΓÇö soft delete (blocked when `paidAmount > 0`)
+- `getFeeSummary` ΓÇö aggregate per institute (by status, totals, overdue)
+- `computeFeeStatus` ΓÇö helper (PENDING/PARTIAL/PAID derive)
+
+**Added ΓÇö `services/paymentService.js` (2 functions):**
+- `recordPayment` ΓÇö creates Payment (VERIFIED) + updates Fee.paidAmount
+  transactionally; rejects overpayment
+- `refundPayment` ΓÇö VERIFIED ΓåÆ REFUNDED + decrements Fee.paidAmount
+  transactionally
+
+**Added ΓÇö `controllers/feeController.js` (9 handlers):**
+- 9 admin/owner handlers wrapping the services
+
+**Added ΓÇö `controllers/studentFeeController.js` (2 handlers):**
+- `listMyFeesHandler` ΓÇö own fees only
+- `getMyFeeHandler` ΓÇö own fee + payments (ownership enforced)
+
+**Added ΓÇö `validators/feeValidator.js` (8 chains):**
+- Create, bulk, list, get, update, delete, record-payment, refund
+
+**Added ΓÇö `validators/studentFeeValidator.js` (2 chains):**
+- List, get
+
+**Added ΓÇö `routes/feeRoutes.js` (9 endpoints):**
+- Mounted at `/api/owner/fees`
+- Middleware: `protect` ΓåÆ `requireRole(OWNER,ADMIN)` ΓåÆ `tenantIsolation`
+- Permissions: FEE_CREATE, FEE_READ, FEE_UPDATE, FEE_CORRECT (delete),
+  FEE_REFUND
+
+**Added ΓÇö `routes/studentFeeRoutes.js` (2 endpoints):**
+- Mounted at `/api/student/fees`
+- Middleware: `protect` ΓåÆ `tenantIsolation` ΓåÆ `requireRole(STUDENT)` ΓåÆ
+  `requirePasswordChanged`
+
+**Modified ΓÇö `app.js`:**
+- Mounted `/api/owner/fees` + `/api/student/fees`
+
+**Added ΓÇö `FUTURE_WORK.md`:**
+- Living backlog (P0 ΓåÆ P3) covering audit log, receipt PDF, Razorpay,
+  notifications, parent portal, and technical debt
+
+**Bugs caught during implementation (all fixed):**
+1. Mongoose 7 callback-style pre hooks ΓåÆ throw-style (deprecated API)
+2. `paidAmount > amount` pre-validate fired before `min: 0` (order)
+3. `description`/`dueDate` in locked paths — removed (mutable per service)
+4. Student fee route matched `/api/student` prefix first — mounted
+   `/api/student/fees` BEFORE `/api/student`
+
+**Tests: 37 new**
+- `tests/models/test-fee-model.js` (10)
+- `tests/api/test-fee-routes.js` (21 ΓÇö 20 planned + 1 extra)
+- `tests/api/test-student-fee-routes.js` (6)
+
+**Total:** 883 + 37 = 920 tests, 0 failures
+
+**Deferred to FUTURE_WORK.md:**
+- Online payment gateway (Razorpay) ΓÇö ~20 hrs
+- Receipt PDF generation ΓÇö ~4 hrs
+- Audit log integration (attendance + fees) ΓÇö ~3 hrs
+- Email/SMS notifications ΓÇö ~8 hrs
+- Parent portal (parent login paused)
+- Fee enhancements (discounts, installments, templates)
+
+---
+
 ### 32.16.18a ΓÇö Student Login Flow (Pre-Fees Readiness)
 
 **Date:** 2026-11-14

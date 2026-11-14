@@ -124,12 +124,28 @@ const paymentSchema = new mongoose.Schema(
       default: null,
     },
 
+    // 32.16.18 ΓÇö Fee linkage (only when paymentType = STUDENT_FEE)
+    feeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Fee",
+      default: null,
+      index: true,
+    },
+
+    studentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+
     paymentType: {
       type: String,
       enum: [
         "INSTITUTE_SUBSCRIPTION",
         "STUDENT_COURSE",
         "STUDENT_BATCH",
+        "STUDENT_FEE",
       ],
       required: true,
     },
@@ -231,6 +247,8 @@ const TERMINAL_PAYMENT_STATUSES = ["REFUNDED"];
 const PROTECTED_PAYMENT_PATHS = [
   "instituteId",
   "subscriptionId",
+  "feeId",
+  "studentId",
   "paymentType",
   "amount",
   "currency",
@@ -302,6 +320,34 @@ paymentSchema.pre("save", function () {
       `Invalid payment status transition: ${originalStatus} -> ${this.status}`
     );
   }
+});
+
+// ---------------------------------------------------------------
+// 32.16.18 ΓÇö FEE PAYMENT LINKAGE VALIDATION
+//
+// If paymentType = STUDENT_FEE, both feeId and studentId are
+// required. If paymentType = INSTITUTE_SUBSCRIPTION, subscriptionId
+// is required. Other types keep existing behavior.
+// ---------------------------------------------------------------
+
+paymentSchema.pre("validate", function () {
+  if (this.paymentType === "STUDENT_FEE") {
+    if (!this.feeId) {
+      throw new Error("feeId is required for STUDENT_FEE payments");
+    }
+    if (!this.studentId) {
+      throw new Error("studentId is required for STUDENT_FEE payments");
+    }
+  }
+});
+
+// ---------------------------------------------------------------
+// Payment feeId index for query performance
+// ---------------------------------------------------------------
+paymentSchema.index({
+  instituteId: 1,
+  feeId: 1,
+  status: 1,
 });
 
 // ---------------------------------------------------------------
