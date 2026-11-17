@@ -10,6 +10,7 @@ const {
   listParentsValidator,
   getParentValidator,
   updateParentValidator,
+  deleteParentValidator,
 } = require("../validators/parentValidator");
 
 const {
@@ -17,6 +18,7 @@ const {
   listParentsHandler,
   getParentHandler,
   updateParentHandler,
+  deleteParentHandler,
 } = require("../controllers/parentController");
 
 const router = express.Router();
@@ -61,4 +63,11 @@ router.patch(
   updateParentHandler
 );
 
+router.delete(
+  "/:parentId",
+  requirePermission("PARENT_DELETE"),
+  deleteParentValidator,
+  validateRequest,
+  deleteParentHandler
+);
 module.exports = router;

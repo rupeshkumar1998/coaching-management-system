@@ -1,12 +1,9 @@
 const express = require("express");
 
 const protect = require("../middleware/authMiddleware");
-const requireRole = require("../middleware/roleMiddleware");
 const tenantIsolation = require("../middleware/tenantMiddleware");
+const requirePermission = require("../middleware/permissionMiddleware");
 
-// const {
-//   createTeacher,
-// } = require("../controllers/adminTeacherController");
 const {
   createTeacher,
   getTeachers,
@@ -17,69 +14,72 @@ const {
   resetTeacherPassword,
 } = require("../controllers/adminTeacherController");
 
-
 const router = express.Router();
 
-// Get teachers of logged-in institute
+// =========================================================
+// 32.16.19 ΓÇö Admin Teacher Routes (permission-guarded)
+//
+// Mounted at /api/admin/teachers in app.js.
+//
+// Middleware chain:
+//   protect            → req.user
+//   tenantIsolation    → req.tenantId (from req.user.instituteId)
+//   requirePermission  → OWNER bypass, ADMIN requires assignment,
+//                        TEACHER blocked (ATTENDANCE-only domain guard),
+//                        STUDENT / PARENT blocked
+//
+// Permission map:
+//   TEACHER_READ            → list, get single
+//   TEACHER_CREATE          → create
+//   TEACHER_UPDATE          → update, toggle status (interim; split into
+//                              TEACHER_ACTIVATE / TEACHER_DEACTIVATE in a
+//                              future sprint ΓÇö see FUTURE_WORK.md)
+//   TEACHER_RESET_PASSWORD  → reset password
+//   TEACHER_DELETE          → soft delete
+// =========================================================
+
+router.use(protect);
+router.use(tenantIsolation);
+
 router.get(
   "/",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
+  requirePermission("TEACHER_READ"),
   getTeachers
 );
 
 router.get(
   "/:teacherId",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
+  requirePermission("TEACHER_READ"),
   getTeacherById
 );
 
 router.patch(
   "/:teacherId",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
+  requirePermission("TEACHER_UPDATE"),
   updateTeacher
 );
 
 router.patch(
   "/:teacherId/status",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
+  requirePermission("TEACHER_UPDATE"),
   toggleTeacherStatus
 );
 
-
-router.delete(
-  "/:teacherId",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
-  deleteTeacher
-);
-
-
-// Institute Admin resets Teacher password
 router.patch(
   "/:teacherId/reset-password",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
+  requirePermission("TEACHER_RESET_PASSWORD"),
   resetTeacherPassword
 );
 
+router.delete(
+  "/:teacherId",
+  requirePermission("TEACHER_DELETE"),
+  deleteTeacher
+);
 
-
-// Institute Admin creates Teacher
 router.post(
   "/",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
+  requirePermission("TEACHER_CREATE"),
   createTeacher
 );
 

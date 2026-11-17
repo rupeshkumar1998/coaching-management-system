@@ -8,12 +8,14 @@ const validateRequest = require("../middleware/validateRequest");
 const {
   createClassValidator,
   updateClassValidator,
+  deleteClassValidator,
 } = require("../validators/classValidator");
 
 const {
   createClassHandler,
   listClassesHandler,
   updateClassHandler,
+  deleteClassHandler,
 } = require("../controllers/classController");
 
 const router = express.Router();
@@ -55,6 +57,14 @@ router.patch(
   updateClassValidator,
   validateRequest,
   updateClassHandler
+);
+
+router.delete(
+  "/:classId",
+  requirePermission("CLASS_DELETE"),
+  deleteClassValidator,
+  validateRequest,
+  deleteClassHandler
 );
 
 module.exports = router;

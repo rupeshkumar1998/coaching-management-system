@@ -142,9 +142,31 @@ const updateBatchValidator = [
   statusField,
 ];
 
+const deleteBatchValidator = [
+  param("batchId")
+    .trim()
+    .notEmpty()
+    .bail()
+    .isMongoId()
+    .withMessage("batchId must be a valid Mongo ID"),
+  body("reason")
+    .optional({ nullable: true })
+    .custom((v) => {
+      if (v === null) return true;
+      if (typeof v !== "string") {
+        throw new Error("reason must be a string or null");
+      }
+      if (v.trim().length > 500) {
+        throw new Error("reason cannot exceed 500 characters");
+      }
+      return true;
+    }),
+];
+
 module.exports = {
   createBatchValidator,
   listBatchValidator,
   getBatchValidator,
   updateBatchValidator,
+  deleteBatchValidator,
 };

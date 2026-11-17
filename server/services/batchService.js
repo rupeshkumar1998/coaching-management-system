@@ -520,9 +520,69 @@ const updateBatch = async ({
   return existing;
 };
 
+
+// ---------------------------------------------------------
+// 5. DELETE BATCH (soft)
+// ---------------------------------------------------------
+
+const deleteBatch = async ({ instituteId, batchId, actorId }) => {
+  const normalizedInstituteId = validateInstituteId(instituteId);
+
+  if (!batchId || !mongoose.isValidObjectId(batchId)) {
+    throw createBatchError(
+      "INVALID_BATCH_ID",
+      "A valid batchId is required"
+    );
+  }
+
+  if (!actorId || !mongoose.isValidObjectId(actorId)) {
+    throw createBatchError(
+      "INVALID_ACTOR_ID",
+      "A valid actor ID is required"
+    );
+  }
+
+  // Block if any active student in batch
+  const hasStudents = await User.exists({
+    instituteId: normalizedInstituteId,
+    role: "STUDENT",
+    batchId,
+    isDeleted: false,
+  });
+
+  if (hasStudents) {
+    throw createBatchError(
+      "BATCH_HAS_STUDENTS",
+      "Cannot delete batch with active students. Move or remove students first.",
+      409
+    );
+  }
+
+  const batch = await Batch.findOne({
+    _id: batchId,
+    instituteId: normalizedInstituteId,
+    isDeleted: false,
+  });
+
+  if (!batch) {
+    throw createBatchError(
+      "BATCH_NOT_FOUND",
+      "Batch not found",
+      404
+    );
+  }
+
+  batch.isDeleted = true;
+  batch.updatedBy = actorId;
+  await batch.save();
+
+  return batch;
+};
+
 module.exports = {
   createBatch,
   listBatches,
   getBatch,
   updateBatch,
+  deleteBatch,
 };

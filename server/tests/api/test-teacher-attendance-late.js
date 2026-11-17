@@ -124,15 +124,19 @@ const makeTeacherProfile = async (instituteId, userId) => {
 
 const setupContext = async () => {
   const instituteId = await makeInstitute();
-  const adminId = await makeUser("INSTITUTE_ADMIN", instituteId);
+  // Owner bypasses permission middleware (industry pattern for
+  // integration tests that verify business logic, not permissions).
+  // Permission tests for admin access live in test-permission-* files.
+  const ownerId = await makeUser("INSTITUTE_OWNER", instituteId);
   const teacherUserId = await makeUser("TEACHER", instituteId);
   const teacherProfileId = await makeTeacherProfile(instituteId, teacherUserId);
   return {
     instituteId,
-    adminId,
+    ownerId,
+    adminId: ownerId, // backwards-compat with existing test bodies
     teacherUserId,
     teacherProfileId,
-    token: makeToken(adminId),
+    token: makeToken(ownerId),
   };
 };
 

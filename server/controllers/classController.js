@@ -2,6 +2,7 @@ const {
   createClass,
   listClasses,
   updateClass,
+  deleteClass,
 } = require("../services/classService");
 
 // =========================================================
@@ -34,6 +35,8 @@ const ERROR_STATUS_MAP = Object.freeze({
   ENTITLEMENT_SNAPSHOT_MISSING: 500,
   ENTITLEMENT_CONFIGURATION_INVALID: 500,
   INTERNAL_ERROR: 500,
+
+  CLASS_HAS_BATCHES: 409,
 });
 
 const resolveStatus = (error) => {
@@ -167,8 +170,32 @@ const updateClassHandler = async (req, res) => {
   }
 };
 
+const deleteClassHandler = async (req, res) => {
+  try {
+    const cls = await deleteClass({
+      instituteId: req.tenantId,
+      classId: req.params.classId,
+      actorId: req.user._id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Class deleted successfully",
+      data: {
+        class: {
+          id: String(cls._id),
+          isDeleted: cls.isDeleted,
+          isActive: cls.isActive,
+        },
+      },
+    });
+  } catch (error) {
+    return handleControllerError(res, error, "deleteClass");
+  }
+};
 module.exports = {
   createClassHandler,
   listClassesHandler,
   updateClassHandler,
+  deleteClassHandler,
 };

@@ -3,6 +3,7 @@ const {
   listParents,
   getParent,
   updateParent,
+  deleteParent,
 } = require("../services/parentService");
 
 // =========================================================
@@ -157,9 +158,35 @@ const updateParentHandler = async (req, res) => {
   }
 };
 
+// DELETE /api/owner/parents/:parentId
+const deleteParentHandler = async (req, res) => {
+  try {
+    const parent = await deleteParent({
+      instituteId: req.tenantId,
+      parentId: req.params.parentId,
+      actorId: req.user._id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Parent deleted successfully",
+      data: {
+        parent: {
+          id: String(parent._id),
+          isDeleted: parent.isDeleted,
+          isActive: parent.isActive,
+          accountStatus: parent.accountStatus,
+        },
+      },
+    });
+  } catch (error) {
+    return handleControllerError(res, error, "deleteParent");
+  }
+};
 module.exports = {
   createParentHandler,
   listParentsHandler,
   getParentHandler,
   updateParentHandler,
+  deleteParentHandler,
 };

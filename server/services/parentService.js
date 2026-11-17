@@ -301,9 +301,55 @@ const updateParent = async ({
   return parent;
 };
 
+// ---------------------------------------------------------
+// 5. DELETE PARENT (soft)
+// ---------------------------------------------------------
+
+const deleteParent = async ({ instituteId, parentId, actorId }) => {
+  const normalizedInstituteId = validateInstituteId(instituteId);
+
+  if (!parentId || !mongoose.isValidObjectId(parentId)) {
+    throw createParentError(
+      "INVALID_PARENT_ID",
+      "A valid parentId is required"
+    );
+  }
+
+  if (!actorId || !mongoose.isValidObjectId(actorId)) {
+    throw createParentError(
+      "INVALID_ACTOR_ID",
+      "A valid actor ID is required"
+    );
+  }
+
+  const parent = await User.findOne({
+    _id: parentId,
+    instituteId: normalizedInstituteId,
+    role: "PARENT",
+    isDeleted: false,
+  });
+
+  if (!parent) {
+    throw createParentError(
+      "PARENT_NOT_FOUND",
+      "Parent not found",
+      404
+    );
+  }
+
+  parent.isDeleted = true;
+  parent.isActive = false;
+  parent.accountStatus = "SUSPENDED";
+
+  await parent.save();
+
+  return parent;
+};
+
 module.exports = {
   createParent,
   listParents,
   getParent,
   updateParent,
+  deleteParent,
 };

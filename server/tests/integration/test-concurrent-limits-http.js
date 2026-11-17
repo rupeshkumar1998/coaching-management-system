@@ -457,7 +457,8 @@ const run = async () => {
           limitKey: "MAX_TEACHERS",
           limitValue: 2,
         });
-        const adminToken = makeToken(adminId);
+        // Owner bypasses permission middleware — .
+        const adminToken = makeToken(ownerId);
 
         const results = await Promise.allSettled(
           Array.from({ length: 5 }, (_, i) =>

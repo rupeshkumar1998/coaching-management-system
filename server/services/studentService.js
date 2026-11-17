@@ -560,6 +560,136 @@ const removeBatch = async ({ instituteId, studentId, actorId }) => {
   return student;
 };
 
+// ---------------------------------------------------------
+// 7. DELETE STUDENT (soft)
+// ---------------------------------------------------------
+
+const deleteStudent = async ({ instituteId, studentId, actorId }) => {
+  const normalizedInstituteId = validateInstituteId(instituteId);
+
+  if (!studentId || !mongoose.isValidObjectId(studentId)) {
+    throw createStudentError(
+      "INVALID_STUDENT_ID",
+      "A valid studentId is required"
+    );
+  }
+
+  if (!actorId || !mongoose.isValidObjectId(actorId)) {
+    throw createStudentError(
+      "INVALID_ACTOR_ID",
+      "A valid actor ID is required"
+    );
+  }
+
+  // Block if student has any VERIFIED-or-partial payment (fee with paidAmount > 0)
+  const Fee = require("../models/Fee");
+  const hasPayments = await Fee.exists({
+    instituteId: normalizedInstituteId,
+    studentId,
+    isDeleted: false,
+    paidAmount: { $gt: 0 },
+  });
+
+  if (hasPayments) {
+    throw createStudentError(
+      "STUDENT_HAS_PAYMENTS",
+      "Cannot delete student with recorded payments. Cancel fees first.",
+      409
+    );
+  }
+
+  const student = await User.findOne({
+    _id: studentId,
+    instituteId: normalizedInstituteId,
+    role: "STUDENT",
+    isDeleted: false,
+  });
+
+  if (!student) {
+    throw createStudentError(
+      "STUDENT_NOT_FOUND",
+      "Student not found",
+      404
+    );
+  }
+
+  student.isDeleted = true;
+  student.isActive = false;
+  student.accountStatus = "SUSPENDED";
+
+  await student.save();
+
+  return student;
+};
+
+// ---------------------------------------------------------
+// 8. RESET STUDENT PASSWORD
+// ---------------------------------------------------------
+
+const resetStudentPassword = async ({
+  instituteId,
+  studentId,
+  newPassword,
+  actorId,
+}) => {
+  const normalizedInstituteId = validateInstituteId(instituteId);
+
+  if (!studentId || !mongoose.isValidObjectId(studentId)) {
+    throw createStudentError(
+      "INVALID_STUDENT_ID",
+      "A valid studentId is required"
+    );
+  }
+
+  if (!actorId || !mongoose.isValidObjectId(actorId)) {
+    throw createStudentError(
+      "INVALID_ACTOR_ID",
+      "A valid actor ID is required"
+    );
+  }
+
+  if (
+    typeof newPassword !== "string" ||
+    newPassword.length < 8 ||
+    newPassword.length > 128
+  ) {
+    throw createStudentError(
+      "INVALID_PASSWORD",
+      "Password must be 8-128 characters"
+    );
+  }
+
+  const student = await User.findOne({
+    _id: studentId,
+    instituteId: normalizedInstituteId,
+    role: "STUDENT",
+    isDeleted: false,
+  }).select("+password");
+
+  if (!student) {
+    throw createStudentError(
+      "STUDENT_NOT_FOUND",
+      "Student not found",
+      404
+    );
+  }
+
+  if (!student.isActive || student.accountStatus !== "ACTIVE") {
+    throw createStudentError(
+      "STUDENT_INACTIVE",
+      "Cannot reset password for an inactive student",
+      409
+    );
+  }
+
+  const hashedPassword = await hashPassword(newPassword);
+  student.password = hashedPassword;
+  student.mustChangePassword = true;
+
+  await student.save();
+
+  return student;
+};
 module.exports = {
   createStudent,
   listStudents,
@@ -567,4 +697,6 @@ module.exports = {
   updateStudent,
   assignBatch,
   removeBatch,
+  deleteStudent,
+  resetStudentPassword,
 };

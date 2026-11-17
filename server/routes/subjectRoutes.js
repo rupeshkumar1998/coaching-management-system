@@ -1,40 +1,8 @@
-// const express = require("express");
-
-// const protect = require("../middleware/authMiddleware");
-// const requireRole = require("../middleware/roleMiddleware");
-// const tenantIsolation = require("../middleware/tenantMiddleware");
-
-// const {
-//   createSubject,
-//   getSubjects,
-// } = require("../controllers/subjectController");
-
-// const router = express.Router();
-
-// // Institute Admin creates a subject
-// router.post(
-//   "/",
-//   protect,
-//   requireRole("INSTITUTE_ADMIN"),
-//   tenantIsolation,
-//   createSubject
-// );
-
-// // Institute Admin views subjects
-// router.get(
-//   "/",
-//   protect,
-//   requireRole("INSTITUTE_ADMIN"),
-//   tenantIsolation,
-//   getSubjects
-// );
-
-// module.exports = router;
 const express = require("express");
 
 const protect = require("../middleware/authMiddleware");
-const requireRole = require("../middleware/roleMiddleware");
 const tenantIsolation = require("../middleware/tenantMiddleware");
+const requirePermission = require("../middleware/permissionMiddleware");
 
 const {
   createSubject,
@@ -48,66 +16,68 @@ const {
 
 const router = express.Router();
 
-// Create subject
+// =========================================================
+// 32.16.19 ΓÇö Subject Routes (permission-guarded)
+//
+// Mounted at /api/admin/subjects in app.js.
+//
+// Middleware chain:
+//   protect            ΓåÆ req.user
+//   tenantIsolation    ΓåÆ req.tenantId
+//   requirePermission  ΓåÆ OWNER bypass; ADMIN requires assignment;
+//                        TEACHER blocked (ATTENDANCE-only);
+//                        STUDENT / PARENT blocked
+//
+// Permission map:
+//   SUBJECT_READ     ΓåÆ list, get single
+//   SUBJECT_CREATE   ΓåÆ create
+//   SUBJECT_UPDATE   ΓåÆ update, activate, deactivate (interim; split into
+//                       SUBJECT_ACTIVATE / SUBJECT_DEACTIVATE in future)
+//   SUBJECT_DELETE   ΓåÆ soft delete (SENSITIVE)
+// =========================================================
+
+router.use(protect);
+router.use(tenantIsolation);
+
 router.post(
   "/",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
+  requirePermission("SUBJECT_CREATE"),
   createSubject
 );
 
-// Get all active subjects
 router.get(
   "/",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
+  requirePermission("SUBJECT_READ"),
   getSubjects
 );
 
-// Get single subject
 router.get(
   "/:subjectId",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
+  requirePermission("SUBJECT_READ"),
   getSubjectById
 );
 
-// Update subject
 router.patch(
   "/:subjectId",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
+  requirePermission("SUBJECT_UPDATE"),
   updateSubject
 );
 
-// Activate subject
 router.patch(
   "/:subjectId/activate",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
+  requirePermission("SUBJECT_UPDATE"),
   activateSubject
 );
 
-// Deactivate subject
 router.patch(
   "/:subjectId/deactivate",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
+  requirePermission("SUBJECT_UPDATE"),
   deactivateSubject
 );
 
-// Soft delete subject
 router.delete(
   "/:subjectId",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
+  requirePermission("SUBJECT_DELETE"),
   deleteSubject
 );
 

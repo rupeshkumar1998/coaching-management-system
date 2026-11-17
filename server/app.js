@@ -78,6 +78,8 @@ const teacherStudentAttendanceRoutes = require("./routes/teacherStudentAttendanc
 const studentProfileRoutes = require("./routes/studentProfileRoutes");
 const feeRoutes = require("./routes/feeRoutes");
 const studentFeeRoutes = require("./routes/studentFeeRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
+const csvExportRoutes = require("./routes/csvExportRoutes");
 
 app.use("/api/bootstrap", bootstrapRoutes);
 app.use("/api/auth", authRoutes);
@@ -107,6 +109,8 @@ app.use("/api/student/fees", studentFeeRoutes);
 app.use("/api/owner/fees", feeRoutes);
 app.use("/api/owner/parents", parentRoutes);
 app.use("/api/owner/subscription-usage", subscriptionUsageRoutes);
+app.use("/api/owner/dashboard", dashboardRoutes);
+app.use("/api/owner/reports/export", csvExportRoutes);
 app.use("/api/admin/trial-offer", trialOfferAdminRoutes);
 app.use("/api/admin/audit-logs", auditLogRoutes);
 

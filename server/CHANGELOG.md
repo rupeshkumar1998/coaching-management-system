@@ -1,15 +1,115 @@
 # Changelog
 
-All notable changes to the Subscription & Entitlement Stack are documented here.
+All notable changes to the Coaching Management System are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-Phases are numbered per the master roadmap (`32.16.15.X`).
+Phases are numbered per the master roadmap.
 
 ---
 
 ## [Unreleased]
 
-### 32.16.17 — Attendance Management (in progress)
+### 32.16.19 — Security Hardening + Complete CRUD + Reports
+
+**Date:** 2026-11-17
+
+Closes critical security gaps discovered during `.19` audit: three route
+files (teacher, subject, teacher-attendance) were entirely missing
+permission checks. Adds 5 delete endpoints, 2 reset-password endpoints,
+dashboard summary, and 3 CSV exports.
+
+**Added — 9 new permissions (catalog + seed):**
+- `ADMIN_DELETE` (SENSITIVE, delegatable:false)
+- `ADMIN_RESET_PASSWORD` (SENSITIVE, delegatable:false)
+- `STUDENT_DELETE`, `STUDENT_RESET_PASSWORD` (SENSITIVE)
+- `TEACHER_DELETE`, `TEACHER_RESET_PASSWORD` (SENSITIVE)
+- `PARENT_DELETE`, `CLASS_DELETE`, `BATCH_DELETE` (SENSITIVE)
+- Catalog: 63 → 72 entries; seed created 9, unchanged 63
+
+**Fixed — Teacher routes (7 endpoints):**
+- `adminTeacherRoutes.js` had ZERO permission checks (any ADMIN could
+  create/delete teachers, reset passwords). Also blocked INSTITUTE_OWNER
+  via `requireRole("INSTITUTE_ADMIN")`.
+- All 7 routes now use `requirePermission(...)` — OWNER bypasses, ADMIN
+  requires assignment
+- Permission map: TEACHER_READ (list/get), TEACHER_CREATE, TEACHER_UPDATE
+  (update/toggle), TEACHER_RESET_PASSWORD (reset), TEACHER_DELETE (delete)
+
+**Fixed — Subject routes (7 endpoints):**
+- Same pattern as teacher routes (zero permission checks)
+- SUBJECT_READ / SUBJECT_CREATE / SUBJECT_UPDATE / SUBJECT_DELETE
+
+**Fixed — Teacher-attendance routes (7 endpoints):**
+- Same pattern
+- ATTENDANCE_MARK / ATTENDANCE_READ / ATTENDANCE_UPDATE /
+  ATTENDANCE_CORRECT (delete)
+
+**Added — 5 soft-delete endpoints:**
+- `DELETE /api/owner/students/:id` (STUDENT_DELETE) — blocks if
+  `STUDENT_HAS_PAYMENTS` (verified payments > 0)
+- `DELETE /api/owner/batches/:id` (BATCH_DELETE) — blocks if
+  `BATCH_HAS_STUDENTS`
+- `DELETE /api/owner/classes/:id` (CLASS_DELETE) — blocks if
+  `CLASS_HAS_BATCHES`
+- `DELETE /api/owner/parents/:id` (PARENT_DELETE) — always allowed (no
+  dependents yet)
+- `DELETE /api/owner/admins/:id` (requireInstituteOwner) — blocks on
+  `CANNOT_DELETE_SELF` and `LAST_ADMIN`
+- No cascade: attendance/fee records preserved (audit trail intact)
+
+**Added — 2 reset-password endpoints:**
+- `PATCH /api/owner/admins/:adminId/reset-password`
+  (requireInstituteOwner) — owner-only, blocks inactive admins
+- `PATCH /api/owner/students/:studentId/reset-password`
+  (STUDENT_RESET_PASSWORD) — sets `mustChangePassword: true` for next
+  login flow
+- Teacher reset-password (previously unguarded) now requires
+  `TEACHER_RESET_PASSWORD`
+
+**Added — Dashboard Summary:**
+- `GET /api/owner/dashboard/summary` (DASHBOARD_READ)
+- 7 sections: students, teachers, batches, classes, fees, attendance
+  (today + last7Days), subscription
+- All queries parallel; subscription failure is fail-soft (returns
+  `{ error: {...} }` in that section but dashboard still succeeds)
+
+**Added — 3 CSV Exports:**
+- `GET /api/owner/reports/export/students.csv` (REPORT_EXPORT)
+- `GET /api/owner/reports/export/fees.csv` (REPORT_EXPORT)
+- `GET /api/owner/reports/export/attendance.csv` (REPORT_EXPORT,
+  requires `batchId` + `from`/`to`)
+- RFC 4180 escaping, UTF-8 BOM for Excel, `\r\n` line endings
+- 10,000-row hard cap (413 `EXPORT_TOO_LARGE`)
+- Institute-scoped, filters respected
+
+**Bugs fixed during implementation:**
+1. `batchController.js` missing `deleteBatch` import (destructure was
+   silently `undefined`; would 500 at runtime)
+2. `test-teacher-attendance-late.js` used admin token (now requires
+   `ATTENDANCE_MARK`); switched to owner token
+3. `test-concurrent-limits-http.js` T4 + `test-cross-feature-limits.js`
+   T2/T3/T6 used admin token for teacher create (now requires
+   `TEACHER_CREATE`); switched to owner token
+
+**Tests: 30 new**
+- `tests/api/test-crud-deletes.js` (12)
+- `tests/api/test-reset-password.js` (4)
+- `tests/api/test-dashboard.js` (5)
+- `tests/api/test-csv-exports.js` (9)
+
+**Total:** 920 + 30 = 950 tests, 0 failures
+
+**Deferred to FUTURE_WORK.md:**
+- Admin routes full permission-based migration (currently
+  `requireInstituteOwner`)
+- Teacher reset-password `mustChangePassword: true` consistency gap
+- Audit log integration (attendance + fees)
+- Receipt PDF generation
+- Online payment gateway (Razorpay)
+
+---
+
+### 32.16.17 — Attendance Management
 
 #### Sub-phase .17.3 — Teacher Attendance: LATE status
 
@@ -98,8 +198,6 @@ in service. Non-ATTENDANCE permissions are rejected at both layers.
 
 ---
 
----
-
 #### Sub-phase .17.7–.17.13 — Student Attendance Management
 
 **Date:** 2026-11-13
@@ -122,7 +220,8 @@ validators, routes, and teacher scoping. Full test coverage.
 - `bulkMarkStudentAttendance()` — all-or-nothing bulk insert
 - `listStudentAttendance()` — paginated, filters, `allowedBatchIds` scope
 - `getStudentAttendance()` — populated read
-- `updateStudentAttendance()` — status + remarks only (immutable date/student/batch)
+- `updateStudentAttendance()` — status + remarks only (immutable
+  date/student/batch)
 - `deleteStudentAttendance()` — soft delete (re-mark allowed)
 - `getStudentAttendanceSummary()` — per student, date range
 - `getBatchAttendanceSummary()` — roster view (marked/unmarked)
@@ -186,7 +285,7 @@ validators, routes, and teacher scoping. Full test coverage.
 
 ---
 
-#### Sub-phase .17 follow-up  Teacher attendance tests + teacher student summary
+#### Sub-phase .17 follow-up — Teacher attendance tests + teacher student summary
 
 **Date:** 2026-11-13
 
@@ -195,19 +294,21 @@ Closes two gaps identified during `.17` production-readiness review:
 2. Teacher could not view individual student attendance history
    (only admin/owner could)
 
-**Added ΓÇö Teacher LATE regression tests (4 tests):**
+**Added — Teacher LATE regression tests (4 tests):**
 
 *`tests/api/test-teacher-attendance-late.js`:*
-- T1: Admin marks LATE ΓåÆ 201 (status + attendanceDate verified)
-- T2: Invalid status ΓåÆ 400 (enum guard works with LATE present)
+- T1: Admin marks LATE → 201 (status + attendanceDate verified)
+- T2: Invalid status → 400 (enum guard works with LATE present)
 - T3: Summary includes `late: 1` in counts
 - T4: List `?status=LATE` filter returns only LATE records
 
-**Added ΓÇö Teacher student-summary endpoint:**
+**Added — Teacher student-summary endpoint:**
 
 *`controllers/teacherStudentAttendanceController.js`:*
-- New `studentSummaryHandler` ΓÇö GET `/api/teacher/student-attendance/summary/student/:studentId`
-- Enforces `assertTeacherOwnsBatch()` ΓÇö 403 if student not in teacher's batch
+- New `studentSummaryHandler` → GET
+  `/api/teacher/student-attendance/summary/student/:studentId`
+- Enforces `assertTeacherOwnsBatch()` → 403 if student not in teacher's
+  batch
 
 *`validators/teacherStudentAttendanceValidator.js`:*
 - Reuses `studentSummaryValidator` from admin validator
@@ -217,14 +318,29 @@ Closes two gaps identified during `.17` production-readiness review:
 - Permission: `ATTENDANCE_READ`
 
 *`tests/api/test-teacher-student-attendance-routes.js` (2 new tests):*
-- G1: Teacher views own student summary ΓåÆ 200
-- G2: Teacher views student in other batch ΓåÆ 403 TEACHER_NOT_ASSIGNED_TO_BATCH
+- G1: Teacher views own student summary → 200
+- G2: Teacher views student in other batch → 403
+  TEACHER_NOT_ASSIGNED_TO_BATCH
 
 **Tests:** +6 new (4 LATE + 2 teacher-summary)
 **Total:** 867 + 6 = 873 tests, 0 failures
 
 ---
-### 32.16.18 ΓÇö Fees Management
+
+### 🎯 32.16.17 Milestone Complete (2026-11-14)
+
+All attendance management sub-phases delivered:
+- `.17.3` — Teacher LATE status
+- `.17.4–.17.6` — Teacher permission boundary
+- `.17.7–.17.13` — Student attendance management
+- `.17 follow-up` — LATE tests + teacher student summary
+
+**Total for the milestone:** 873 tests, 0 failures.
+Production-ready attendance management (teacher + student).
+
+---
+
+### 32.16.18 — Fees Management
 
 **Date:** 2026-11-14
 
@@ -233,7 +349,7 @@ invoices (single or bulk per batch), records offline payments (cash,
 UPI, bank), issues refunds, and views a dashboard. Students can view
 their own fees + payment history.
 
-**Added ΓÇö Model (`models/Fee.js`):**
+**Added — Model (`models/Fee.js`):**
 - Fields: `instituteId`, `studentId`, `batchId` (snapshot), `classId`
   (snapshot), `cycle` (e.g., "OCT-2026"), `description`, `amount`,
   `currency`, `dueDate`, `status` (PENDING/PARTIAL/PAID/CANCELLED),
@@ -247,7 +363,7 @@ their own fees + payment history.
 - `paidAmount > amount` rejected
 - Cancel blocked when `paidAmount > 0`
 
-**Modified ΓÇö `models/Payment.js`:**
+**Modified — `models/Payment.js`:**
 - Added `STUDENT_FEE` to `paymentType` enum
 - Added `feeId` + `studentId` fields (only for STUDENT_FEE)
 - Extended `PROTECTED_PAYMENT_PATHS` (immutability) to include new fields
@@ -255,56 +371,56 @@ their own fees + payment history.
   STUDENT_FEE payments
 - Added index: `(instituteId, feeId, status)`
 
-**Added ΓÇö `services/feeService.js` (8 functions):**
-- `createFee` ΓÇö single invoice create (student + batch validated)
-- `bulkCreateFees` ΓÇö one fee per active student in batch (all-or-nothing)
-- `listFees` ΓÇö filters (studentId, batchId, status, cycle, overdue, date
+**Added — `services/feeService.js` (8 functions):**
+- `createFee` — single invoice create (student + batch validated)
+- `bulkCreateFees` — one fee per active student in batch (all-or-nothing)
+- `listFees` — filters (studentId, batchId, status, cycle, overdue, date
   range), pagination, `isOverdue` derived
-- `getFee` ΓÇö fee + payment history
-- `updateFee` ΓÇö description, dueDate, notes, status (CANCELLED only)
-- `deleteFee` ΓÇö soft delete (blocked when `paidAmount > 0`)
-- `getFeeSummary` ΓÇö aggregate per institute (by status, totals, overdue)
-- `computeFeeStatus` ΓÇö helper (PENDING/PARTIAL/PAID derive)
+- `getFee` — fee + payment history
+- `updateFee` — description, dueDate, notes, status (CANCELLED only)
+- `deleteFee` — soft delete (blocked when `paidAmount > 0`)
+- `getFeeSummary` — aggregate per institute (by status, totals, overdue)
+- `computeFeeStatus` — helper (PENDING/PARTIAL/PAID derive)
 
-**Added ΓÇö `services/paymentService.js` (2 functions):**
-- `recordPayment` ΓÇö creates Payment (VERIFIED) + updates Fee.paidAmount
+**Added — `services/paymentService.js` (2 functions):**
+- `recordPayment` — creates Payment (VERIFIED) + updates Fee.paidAmount
   transactionally; rejects overpayment
-- `refundPayment` ΓÇö VERIFIED ΓåÆ REFUNDED + decrements Fee.paidAmount
+- `refundPayment` — VERIFIED → REFUNDED + decrements Fee.paidAmount
   transactionally
 
-**Added ΓÇö `controllers/feeController.js` (9 handlers):**
+**Added — `controllers/feeController.js` (9 handlers):**
 - 9 admin/owner handlers wrapping the services
 
-**Added ΓÇö `controllers/studentFeeController.js` (2 handlers):**
-- `listMyFeesHandler` ΓÇö own fees only
-- `getMyFeeHandler` ΓÇö own fee + payments (ownership enforced)
+**Added — `controllers/studentFeeController.js` (2 handlers):**
+- `listMyFeesHandler` — own fees only
+- `getMyFeeHandler` — own fee + payments (ownership enforced)
 
-**Added ΓÇö `validators/feeValidator.js` (8 chains):**
+**Added — `validators/feeValidator.js` (8 chains):**
 - Create, bulk, list, get, update, delete, record-payment, refund
 
-**Added ΓÇö `validators/studentFeeValidator.js` (2 chains):**
+**Added — `validators/studentFeeValidator.js` (2 chains):**
 - List, get
 
-**Added ΓÇö `routes/feeRoutes.js` (9 endpoints):**
+**Added — `routes/feeRoutes.js` (9 endpoints):**
 - Mounted at `/api/owner/fees`
-- Middleware: `protect` ΓåÆ `requireRole(OWNER,ADMIN)` ΓåÆ `tenantIsolation`
+- Middleware: `protect` → `requireRole(OWNER,ADMIN)` → `tenantIsolation`
 - Permissions: FEE_CREATE, FEE_READ, FEE_UPDATE, FEE_CORRECT (delete),
   FEE_REFUND
 
-**Added ΓÇö `routes/studentFeeRoutes.js` (2 endpoints):**
+**Added — `routes/studentFeeRoutes.js` (2 endpoints):**
 - Mounted at `/api/student/fees`
-- Middleware: `protect` ΓåÆ `tenantIsolation` ΓåÆ `requireRole(STUDENT)` ΓåÆ
+- Middleware: `protect` → `tenantIsolation` → `requireRole(STUDENT)` →
   `requirePasswordChanged`
 
-**Modified ΓÇö `app.js`:**
+**Modified — `app.js`:**
 - Mounted `/api/owner/fees` + `/api/student/fees`
 
-**Added ΓÇö `FUTURE_WORK.md`:**
-- Living backlog (P0 ΓåÆ P3) covering audit log, receipt PDF, Razorpay,
+**Added — `FUTURE_WORK.md`:**
+- Living backlog (P0 → P3) covering audit log, receipt PDF, Razorpay,
   notifications, parent portal, and technical debt
 
 **Bugs caught during implementation (all fixed):**
-1. Mongoose 7 callback-style pre hooks ΓåÆ throw-style (deprecated API)
+1. Mongoose 7 callback-style pre hooks → throw-style (deprecated API)
 2. `paidAmount > amount` pre-validate fired before `min: 0` (order)
 3. `description`/`dueDate` in locked paths — removed (mutable per service)
 4. Student fee route matched `/api/student` prefix first — mounted
@@ -312,59 +428,64 @@ their own fees + payment history.
 
 **Tests: 37 new**
 - `tests/models/test-fee-model.js` (10)
-- `tests/api/test-fee-routes.js` (21 ΓÇö 20 planned + 1 extra)
+- `tests/api/test-fee-routes.js` (21 — 20 planned + 1 extra)
 - `tests/api/test-student-fee-routes.js` (6)
 
 **Total:** 883 + 37 = 920 tests, 0 failures
 
 **Deferred to FUTURE_WORK.md:**
-- Online payment gateway (Razorpay) ΓÇö ~20 hrs
-- Receipt PDF generation ΓÇö ~4 hrs
-- Audit log integration (attendance + fees) ΓÇö ~3 hrs
-- Email/SMS notifications ΓÇö ~8 hrs
+- Online payment gateway (Razorpay) — ~20 hrs
+- Receipt PDF generation — ~4 hrs
+- Audit log integration (attendance + fees) — ~3 hrs
+- Email/SMS notifications — ~8 hrs
 - Parent portal (parent login paused)
 - Fee enhancements (discounts, installments, templates)
 
 ---
 
-### 32.16.18a ΓÇö Student Login Flow (Pre-Fees Readiness)
+### 32.16.18a — Student Login Flow (Pre-Fees Readiness)
 
 **Date:** 2026-11-14
+
+> **Order note:** Documented after `.18` for CHANGELOG order continuity,
+> but committed **before** `.18` (commit `da815f3` preceded `92cf194`).
+> It was a prerequisite — the temp-password flow needed to be closed
+> before student-facing fees could be safely scoped.
 
 Closes the temp-password enforcement gap exposed by `createStudent()`
 (`mustChangePassword: true` was set but never checked). Adds the
 minimum student-facing endpoints so future Fees work can be scoped
 correctly from the start.
 
-**Added ΓÇö Middleware (`middleware/requirePasswordChanged.js`):**
+**Added — Middleware (`middleware/requirePasswordChanged.js`):**
 - Blocks access with 403 PASSWORD_CHANGE_REQUIRED when
   `req.user.mustChangePassword === true`
 - Must run AFTER `protect`
 - `/api/student/me` intentionally bypasses this gate so the frontend
   can read the flag and redirect to change-password
 
-**Modified ΓÇö `controllers/authController.js`:**
+**Modified — `controllers/authController.js`:**
 - `login()` response now includes `mustChangePassword` flag
 - `changePassword()` clears `user.mustChangePassword = false` on success
 
-**Added ΓÇö Student endpoints (`controllers/studentProfileController.js`):**
-- `GET /api/student/me` ΓÇö own profile (bypasses password gate)
-- `GET /api/student/attendance` ΓÇö own attendance (gated)
-- `GET /api/student/attendance/summary` ΓÇö own attendance counts (gated)
+**Added — Student endpoints (`controllers/studentProfileController.js`):**
+- `GET /api/student/me` — own profile (bypasses password gate)
+- `GET /api/student/attendance` — own attendance (gated)
+- `GET /api/student/attendance/summary` — own attendance counts (gated)
 
-**Added ΓÇö Routes (`routes/studentProfileRoutes.js`):**
+**Added — Routes (`routes/studentProfileRoutes.js`):**
 - Mounted at `/api/student`
-- Middleware chain: `protect` ΓåÆ `tenantIsolation` ΓåÆ `requireRole("STUDENT")`
+- Middleware chain: `protect` → `tenantIsolation` → `requireRole("STUDENT")`
 - `/me` bypasses `requirePasswordChanged`; other routes require it
 
-**Modified ΓÇö `app.js`:**
+**Modified — `app.js`:**
 - Mounted `/api/student`
 
 **Security flow (verified by tests):**
-1. Admin creates student ΓåÆ temp password + `mustChangePassword: true`
-2. Student logs in ΓåÆ response contains `mustChangePassword: true`
-3. Direct access to `/api/student/attendance` ΓåÆ 403 PASSWORD_CHANGE_REQUIRED
-4. `POST /api/auth/change-password` ΓåÆ success ΓåÆ flag cleared
+1. Admin creates student → temp password + `mustChangePassword: true`
+2. Student logs in → response contains `mustChangePassword: true`
+3. Direct access to `/api/student/attendance` → 403 PASSWORD_CHANGE_REQUIRED
+4. `POST /api/auth/change-password` → success → flag cleared
 5. All gated routes now accessible
 
 **Tests: 10 new**
@@ -373,14 +494,26 @@ correctly from the start.
   - T2: login returns `mustChangePassword=false`
   - T3: `/me` bypasses password gate
   - T4: `/me` returns `batchId` + derived `classId`
-  - T5: `/attendance` ΓåÆ 403 PASSWORD_CHANGE_REQUIRED
-  - T6: `/attendance/summary` ΓåÆ 403 PASSWORD_CHANGE_REQUIRED
+  - T5: `/attendance` → 403 PASSWORD_CHANGE_REQUIRED
+  - T6: `/attendance/summary` → 403 PASSWORD_CHANGE_REQUIRED
   - T7: change-password clears flag; gated route then 200
-  - T8: change-password wrong current ΓåÆ 401
-  - T9: no token on `/me` ΓåÆ 401
-  - T10: non-STUDENT on `/api/student/me` ΓÇÆ 403
+  - T8: change-password wrong current → 401
+  - T9: no token on `/me` → 401
+  - T10: non-STUDENT on `/api/student/me` → 403
 
 **Total:** 873 + 10 = 883 tests, 0 failures
+
+---
+
+### 🎯 32.16.18 Milestone Complete (2026-11-17)
+
+All fees + student-login sub-phases delivered:
+- `.18a` — Student login flow (pre-fees readiness)
+- `.18` — Fees management (model, service, controllers, routes, tests)
+
+**Total for the milestone:** 920 tests, 0 failures.
+Production-ready fee management (manual operation mode — online payment
+gateway deferred to FUTURE_WORK.md).
 
 ---
 
@@ -388,13 +521,15 @@ correctly from the start.
 
 **Date:** 2026-11-10
 
-Final sprint — concurrency, plan change, and cross-feature regression verification.
+Final sprint — concurrency, plan change, and cross-feature regression
+verification.
 
 **Added — Concurrent Limits HTTP (6A, 8 tests):**
 
 `tests/integration/test-concurrent-limits-http.js`
 
-Verifies race safety at HTTP level (middleware + controller + service + transaction):
+Verifies race safety at HTTP level (middleware + controller + service +
+transaction):
 
 - 5 concurrent class creates, MAX_CLASSES=2 → exactly 2 succeed
 - 5 concurrent batch creates, MAX_BATCHES=3 → exactly 3 succeed
@@ -402,7 +537,8 @@ Verifies race safety at HTTP level (middleware + controller + service + transact
 - 5 concurrent teacher creates, MAX_TEACHERS=2 → exactly 2 succeed
 - 5 concurrent admin creates, MAX_ADMINS=2 → exactly 2 succeed
 - 5 concurrent parent creates, MAX_PARENTS=2 → exactly 2 succeed
-- Concurrent independent limits (classes at limit, admins available) → independent outcomes
+- Concurrent independent limits (classes at limit, admins available) →
+  independent outcomes
 - 4 concurrent at limit-1 (limit=2, current=1) → exactly 1 succeeds
 
 Each test verifies:
@@ -417,12 +553,14 @@ Each test verifies:
 Verifies counter and records survive plan changes:
 
 - Upgrade (limit 2→10): counter preserved, more creates allowed
-- Downgrade (limit 10→2, current=5): new creates blocked, existing records untouched
+- Downgrade (limit 10→2, current=5): new creates blocked, existing
+  records untouched
 - Dashboard shows remaining=0 when current > limit
 - Existing classes untouched after downgrade
 - Subscription _id, snapshotCapturedAt, planVersionId unchanged
 
-Key insight: UsageCounter is keyed by (instituteId, limitKey, period), NOT by subscriptionId — so it survives plan changes.
+Key insight: UsageCounter is keyed by (instituteId, limitKey, period),
+NOT by subscriptionId — so it survives plan changes.
 
 **Added — Cross-Feature Limits (6C, 6 tests):**
 
@@ -467,7 +605,8 @@ Verifies multi-resource correctness:
 
 **Date:** 2026-11-10
 
-Production-hardening: health checks, usage dashboard, structured logging, env validation.
+Production-hardening: health checks, usage dashboard, structured
+logging, env validation.
 
 **Added — Health endpoints (5A):**
 
@@ -520,7 +659,8 @@ Foundation for future services — new code should use `logger` directly.
 - Called from `server.js` **before** `mongoose.connect()`
 
 `server.js` updated:
-- Removed hardcoded localhost fallback for `MONGO_URI` (was masking config errors)
+- Removed hardcoded localhost fallback for `MONGO_URI` (was masking
+  config errors)
 - Env validation runs first
 
 Added `.env.example` — template for new developers.
@@ -557,7 +697,8 @@ Wired 3 remaining limits into existing + new endpoints.
 - Only name/phone updatable (email/password immutable)
 - 14 service tests
 
-*controllers/parentController.js + validators/parentValidator.js + routes/parentRoutes.js:*
+*controllers/parentController.js + validators/parentValidator.js +
+routes/parentRoutes.js:*
 - `POST /api/owner/parents` (PARENT_CREATE)
 - `GET /api/owner/parents` (PARENT_READ)
 - `GET /api/owner/parents/:parentId` (PARENT_READ)
@@ -580,7 +721,8 @@ Wired 3 remaining limits into existing + new endpoints.
 
 **All 6 limits enforced atomically, race-safe, transaction-rolled back.**
 
-**Tests:** 39 new tests (10 owner admin limit + 14 parent service + 19 parent routes + updated 19 admin teacher)
+**Tests:** 39 new tests (10 owner admin limit + 14 parent service + 19
+parent routes + updated 19 admin teacher)
 **Total:** 708 + 39 = 747 tests, 0 failures
 
 ---
@@ -763,7 +905,8 @@ This is the first limit fully wired into a real business endpoint.
    - 14 route tests
 
 7. **New permission keys** in catalog:
-   - `CLASS_READ`, `CLASS_CREATE`, `CLASS_UPDATE`, `CLASS_ACTIVATE`, `CLASS_DEACTIVATE`
+   - `CLASS_READ`, `CLASS_CREATE`, `CLASS_UPDATE`, `CLASS_ACTIVATE`,
+     `CLASS_DEACTIVATE`
    - All OPERATIONAL, all delegatable
    - Seeded to DB (5 created, 58 unchanged)
 
@@ -794,25 +937,35 @@ See phase-by-phase breakdown below.
 
 ### Pending Phases
 
-**32.16.15** — ✅ All 18 phases complete (see [32.16.15 Milestone Complete] below.)
+**32.16.15** — ✅ All 18 phases complete (see [32.16.15 Milestone Complete] above).
 
 **32.16.16** — Subscription Limits Enforcement ✅ (released):
-- Sprint 1 — Class Management ✅ (released)
-- Sprint 2 — Batch Management ✅ (released)
-- Sprint 3 — Student + batch assignment ✅ (released)
-- Sprint 4 — Teacher/Admin/Parent creates ✅ (released)
-- Sprint 5 — Dashboard + Health + Logger ✅ (released; CI/CD deferred)
-- Sprint 6 — Final Verification ✅ (released)
+- Sprint 1 — Class Management ✅
+- Sprint 2 — Batch Management ✅
+- Sprint 3 — Student + batch assignment ✅
+- Sprint 4 — Teacher/Admin/Parent creates ✅
+- Sprint 5 — Dashboard + Health + Logger ✅ (CI/CD deferred)
+- Sprint 6 — Final Verification ✅
 
-**32.16.17** — Attendance Management (in progress):
+**32.16.17** — Attendance Management ✅ (released):
 - Sub-phase .17.3 — Teacher Attendance LATE status ✅
 - Sub-phase .17.4–.17.6 — Teacher Permission Boundary ✅
 - Sub-phase .17.7–.17.13 — Student Attendance Management ✅
 - Sub-phase .17 follow-up — Teacher LATE tests + teacher summary ✅
 
-- 32.16.18a — Student Login Flow ✅
+**32.16.18a** — Student Login Flow ✅ (released)
+**32.16.18** — Fees Management ✅ (released)
+**32.16.19** — Security Hardening + CRUD + Reports ✅ (released)
 
-**Deferred to v2:** Exam, Lead, Storage, SMS, Email, WhatsApp, API request limits.
+**Next milestone candidates:**
+- 32.16.20 — Production Deployment (CI/CD + MongoDB Atlas + Sentry)
+- 32.16.21 — Audit Log Integration (P0 from FUTURE_WORK.md)
+- 32.16.22 — Receipt PDF Generation (P0 from FUTURE_WORK.md)
+
+**Deferred to v2:** Exam, Lead, Storage, SMS, Email, WhatsApp, API
+request limits, parent portal, online payment gateway.
+
+---
 
 ## [32.16.15.18] - 2026-11-09
 
@@ -1009,10 +1162,12 @@ Coverage:
 - updateOne / updateMany / findOneAndUpdate rejection
 - replaceOne / findOneAndReplace rejection
 - bulkWrite / insertMany / insertOne rejection
-- All deletion methods rejection (deleteOne, deleteMany, findOneAndDelete)
+- All deletion methods rejection (deleteOne, deleteMany,
+  findOneAndDelete)
 - Logical plan deletion rejection
 - planId and version immutability
-- Status change blocking (including $unset, $setOnInsert, $set with updatePipeline)
+- Status change blocking (including $unset, $setOnInsert, $set with
+  updatePipeline)
 - Upsert rejection
 
 ### Tests:
@@ -1031,9 +1186,10 @@ Coverage:
 
 ### Added — Trial Offer Admin API (new feature) + Trial ON/OFF Regression
 
-**Context:** Trial offer lifecycle service existed (`platformTrialOfferService.js`)
-but no HTTP routes existed for SUPER_ADMIN to manage it. This phase adds
-the admin API and formally verifies trial ON/OFF semantics with real DB.
+**Context:** Trial offer lifecycle service existed
+(`platformTrialOfferService.js`) but no HTTP routes existed for
+SUPER_ADMIN to manage it. This phase adds the admin API and formally
+verifies trial ON/OFF semantics with real DB.
 
 ### Added — Trial Offer Admin API (3 new files, 7 endpoints)
 
@@ -1117,7 +1273,8 @@ the missing boundary tests.
 
 **Part B — API integration (4 tests):**
 - B1: Permission ✓ + Entitlement ✓ → 200
-- B2: Permission ✗ + Entitlement ✓ → 403 (permission denies first, no `reason` field)
+- B2: Permission ✗ + Entitlement ✓ → 403 (permission denies first,
+  no `reason` field)
 - B3: Permission ✓ + Entitlement ✗ → 403 (has `reason` field)
 - B4: Permission ✗ + Entitlement ✗ → 403 (permission short-circuits)
 
@@ -1152,9 +1309,11 @@ the missing boundary tests.
 
 ### References:
 - New test file: `tests/api/test-permission-entitlement-boundary.js`
-- Depends on: `.10` (Entitlement), `.11` (Limit), `.12` (Snapshot), `.13` (Legacy)
+- Depends on: `.10` (Entitlement), `.11` (Limit), `.12` (Snapshot),
+  `.13` (Legacy)
 
-----
+---
+
 ## [32.16.15.13] - 2026-11-08
 
 ### Status: Compatibility Verified
@@ -1245,7 +1404,8 @@ Commit Reference:
 - Central limit decision engine (checkLimit, reserveLimit, releaseLimit)
 - Atomic reservation via UsageCounter with race-safe $inc guards
 - Registry/strategy pattern for pluggable per-resource counters
-- 4 production counters: MAX_STUDENTS, MAX_TEACHERS, MAX_ADMINS, MAX_PARENTS
+- 4 production counters: MAX_STUDENTS, MAX_TEACHERS, MAX_ADMINS,
+  MAX_PARENTS
 - 9 pending counters fail closed (RESOURCE_NOT_IMPLEMENTED)
 - Bulk dashboard endpoint (getLimitStatus, getAllLimitStatuses)
 - Feature dependency enforced before limit check
@@ -1281,9 +1441,10 @@ Commit Reference:
 
 ### Added — Super Admin Plan Management Boundary
 
-**Naming note:** This phase is canonically titled "Super Admin plan management boundary."
-The commit message from that time reads "Subscription Plan Management" — both describe
-the same delivered scope. The commit is preserved for historical accuracy; this
+**Naming note:** This phase is canonically titled "Super Admin plan
+management boundary." The commit message from that time reads
+"Subscription Plan Management" — both describe the same delivered
+scope. The commit is preserved for historical accuracy; this
 CHANGELOG entry documents the canonical phase name.
 
 Delivered:

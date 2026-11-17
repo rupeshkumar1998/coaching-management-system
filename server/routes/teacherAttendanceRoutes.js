@@ -1,10 +1,8 @@
 const express = require("express");
 
 const protect = require("../middleware/authMiddleware");
-const requireRole = require("../middleware/roleMiddleware");
 const tenantIsolation = require("../middleware/tenantMiddleware");
-
-
+const requirePermission = require("../middleware/permissionMiddleware");
 
 const {
   markTeacherAttendance,
@@ -18,73 +16,76 @@ const {
 
 const router = express.Router();
 
+// =========================================================
+// 32.16.19 ΓÇö Teacher Attendance Routes (permission-guarded)
+//
+// Mounted at /api/admin/teacher-attendance in app.js.
+//
+// Middleware chain:
+//   protect            ΓåÆ req.user
+//   tenantIsolation    ΓåÆ req.tenantId
+//   requirePermission  ΓåÆ OWNER bypass; ADMIN requires assignment;
+//                        TEACHER blocked by ATTENDANCE-only guard (but
+//                        these are admin routes, not teacher self-service
+//                        routes); STUDENT/PARENT blocked
+//
+// Permission map:
+//   ATTENDANCE_MARK     ΓåÆ mark
+//   ATTENDANCE_READ     ΓåÆ list, get by teacher, get by date, summary
+//   ATTENDANCE_UPDATE   ΓåÆ patch (status/remarks edits)
+//   ATTENDANCE_CORRECT  ΓåÆ soft delete (SENSITIVE ΓÇö historical corrections)
+// =========================================================
 
-// Institute Admin updates teacher attendance
-router.patch(
-  "/:attendanceId",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
-  updateTeacherAttendance
+router.use(protect);
+router.use(tenantIsolation);
+
+// POST mark
+router.post(
+  "/",
+  requirePermission("ATTENDANCE_MARK"),
+  markTeacherAttendance
 );
 
-
-// Institute Admin soft-deletes teacher attendance
-router.delete(
-  "/:attendanceId",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
-  deleteTeacherAttendance
-);
-
-
-// Institute Admin gets attendance summary of one teacher
-router.get(
-  "/teacher/:teacherId/summary",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
-  getTeacherAttendanceSummary
-);
-
-
-// Institute Admin gets attendance of one teacher
-router.get(
-  "/teacher/:teacherId",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
-  getAttendanceByTeacher
-);
-
-
-// Institute Admin gets attendance by date
-router.get(
-  "/date/:date",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
-  getAttendanceByDate
-);
-
-// Institute Admin gets teacher attendance
+// GET list (with filters)
 router.get(
   "/",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
+  requirePermission("ATTENDANCE_READ"),
   getTeacherAttendance
 );
 
+// GET summary for one teacher
+router.get(
+  "/teacher/:teacherId/summary",
+  requirePermission("ATTENDANCE_READ"),
+  getTeacherAttendanceSummary
+);
 
-// Institute Admin marks attendance for a teacher
-router.post(
-  "/",
-  protect,
-  requireRole("INSTITUTE_ADMIN"),
-  tenantIsolation,
-  markTeacherAttendance
+// GET all attendance of one teacher
+router.get(
+  "/teacher/:teacherId",
+  requirePermission("ATTENDANCE_READ"),
+  getAttendanceByTeacher
+);
+
+// GET by date
+router.get(
+  "/date/:date",
+  requirePermission("ATTENDANCE_READ"),
+  getAttendanceByDate
+);
+
+// PATCH update (status / remarks)
+router.patch(
+  "/:attendanceId",
+  requirePermission("ATTENDANCE_UPDATE"),
+  updateTeacherAttendance
+);
+
+// DELETE soft (SENSITIVE ΓÇö corrections)
+router.delete(
+  "/:attendanceId",
+  requirePermission("ATTENDANCE_CORRECT"),
+  deleteTeacherAttendance
 );
 
 module.exports = router;

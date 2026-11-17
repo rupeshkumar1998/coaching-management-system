@@ -5,6 +5,8 @@ const {
   updateStudent,
   assignBatch,
   removeBatch,
+  deleteStudent,
+  resetStudentPassword,
 } = require("../services/studentService");
 
 // =========================================================
@@ -12,6 +14,7 @@ const {
 // =========================================================
 
 const ERROR_STATUS_MAP = Object.freeze({
+  INVALID_PASSWORD: 400,
   INVALID_NAME: 400,
   INVALID_EMAIL: 400,
   INVALID_PHONE: 400,
@@ -29,6 +32,8 @@ const ERROR_STATUS_MAP = Object.freeze({
   BATCH_NOT_FOUND: 404,
   STUDENT_NOT_FOUND: 404,
 
+  STUDENT_HAS_PAYMENTS: 409,
+  STUDENT_INACTIVE: 409,
   EMAIL_EXISTS: 409,
   BATCH_CLASS_MISMATCH: 409,
   CLASS_INACTIVE: 409,
@@ -273,6 +278,56 @@ const removeBatchHandler = async (req, res) => {
   }
 };
 
+
+// ---------------------------------------------------------
+// DELETE /api/owner/students/:studentId
+// ---------------------------------------------------------
+const deleteStudentHandler = async (req, res) => {
+  try {
+    const student = await deleteStudent({
+      instituteId: req.tenantId,
+      studentId: req.params.studentId,
+      actorId: req.user._id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Student deleted successfully",
+      data: {
+        student: {
+          id: String(student._id),
+          isDeleted: student.isDeleted,
+          isActive: student.isActive,
+          accountStatus: student.accountStatus,
+        },
+      },
+    });
+  } catch (error) {
+    return handleControllerError(res, error, "deleteStudent");
+  }
+};
+
+// ---------------------------------------------------------
+// PATCH /api/owner/students/:studentId/reset-password
+// ---------------------------------------------------------
+const resetStudentPasswordHandler = async (req, res) => {
+  try {
+    await resetStudentPassword({
+      instituteId: req.tenantId,
+      studentId: req.params.studentId,
+      newPassword: req.body.newPassword,
+      actorId: req.user._id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Student password reset successfully. Student must change it on next login.",
+    });
+  } catch (error) {
+    return handleControllerError(res, error, "resetStudentPassword");
+  }
+};
 module.exports = {
   createStudentHandler,
   listStudentsHandler,
@@ -280,4 +335,6 @@ module.exports = {
   updateStudentHandler,
   assignBatchHandler,
   removeBatchHandler,
+  deleteStudentHandler,
+  resetStudentPasswordHandler,
 };

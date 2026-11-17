@@ -10,6 +10,8 @@ const {
   getOwnerAdminById,
   updateOwnerAdmin,
   updateOwnerAdminStatus,
+  deleteOwnerAdmin,
+  resetOwnerAdminPassword,
 } = require("../controllers/ownerAdminController");
 
 const router = express.Router();
@@ -59,4 +61,24 @@ router.patch(
 );
 
 
+// Owner soft-deletes an Institute Admin
+// Self-delete and last-admin protections are enforced
+// in the controller. requireInstituteOwner sets
+// req.institute + req.tenantId, which the controller
+// depends on.
+router.delete(
+  "/:adminId",
+  protect,
+  requireInstituteOwner,
+  deleteOwnerAdmin
+);
+
+// Owner resets an Institute Admin's password
+// (owner-only; self-reset via /api/auth/change-password)
+router.patch(
+  "/:adminId/reset-password",
+  protect,
+  requireInstituteOwner,
+  resetOwnerAdminPassword
+);
 module.exports = router;

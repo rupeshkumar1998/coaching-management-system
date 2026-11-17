@@ -305,7 +305,8 @@ const run = async () => {
           { key: "MAX_PARENTS", value: 5 },
         ]);
         const token = makeToken(ownerId);
-        const adminToken = makeToken(adminId);
+        // Owner bypasses permission middleware
+        const adminToken = makeToken(ownerId);
 
         // 1. Class
         const classRes = await request("/api/owner/classes", {
@@ -423,7 +424,8 @@ const run = async () => {
           { key: "MAX_PARENTS", value: 5 },
         ]);
         const token = makeToken(ownerId);
-        const adminToken = makeToken(adminId);
+        // Owner bypasses permission middleware
+        const adminToken = makeToken(ownerId);
 
         // Create class + batch for student
         const classRes = await request("/api/owner/classes", {
@@ -604,7 +606,8 @@ const run = async () => {
           { key: "MAX_PARENTS", value: 5 }, // 5 available
         ]);
         const token = makeToken(ownerId);
-        const adminToken = makeToken(adminId);
+        // Owner bypasses permission middleware
+        const adminToken = makeToken(ownerId);
 
         // Fill 5 limits with 1 each
         const classRes = await request("/api/owner/classes", {

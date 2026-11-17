@@ -45,6 +45,22 @@ const PERMISSION_CATALOG = Object.freeze([
     description: "Deactivate institute administrators",
     isDelegatable: true,
   },
+  {
+    permissionKey: PERMISSIONS.ADMIN_DELETE,
+    resource: "ADMIN",
+    action: "DELETE",
+    category: PERMISSION_CATEGORIES.SENSITIVE,
+    description: "Soft-delete institute administrators",
+    isDelegatable: false,
+  },
+  {
+    permissionKey: PERMISSIONS.ADMIN_RESET_PASSWORD,
+    resource: "ADMIN",
+    action: "RESET_PASSWORD",
+    category: PERMISSION_CATEGORIES.SENSITIVE,
+    description: "Reset institute administrator passwords",
+    isDelegatable: false,
+  },
 
   // Student
   {
@@ -85,6 +101,22 @@ const PERMISSION_CATALOG = Object.freeze([
     action: "DEACTIVATE",
     category: PERMISSION_CATEGORIES.OPERATIONAL,
     description: "Deactivate students",
+    isDelegatable: true,
+  },
+  {
+    permissionKey: PERMISSIONS.STUDENT_DELETE,
+    resource: "STUDENT",
+    action: "DELETE",
+    category: PERMISSION_CATEGORIES.SENSITIVE,
+    description: "Soft-delete students",
+    isDelegatable: true,
+  },
+  {
+    permissionKey: PERMISSIONS.STUDENT_RESET_PASSWORD,
+    resource: "STUDENT",
+    action: "RESET_PASSWORD",
+    category: PERMISSION_CATEGORIES.SENSITIVE,
+    description: "Reset student passwords",
     isDelegatable: true,
   },
 
@@ -129,6 +161,22 @@ const PERMISSION_CATALOG = Object.freeze([
     description: "Deactivate teachers",
     isDelegatable: true,
   },
+  {
+    permissionKey: PERMISSIONS.TEACHER_DELETE,
+    resource: "TEACHER",
+    action: "DELETE",
+    category: PERMISSION_CATEGORIES.SENSITIVE,
+    description: "Soft-delete teachers",
+    isDelegatable: true,
+  },
+  {
+    permissionKey: PERMISSIONS.TEACHER_RESET_PASSWORD,
+    resource: "TEACHER",
+    action: "RESET_PASSWORD",
+    category: PERMISSION_CATEGORIES.SENSITIVE,
+    description: "Reset teacher passwords",
+    isDelegatable: true,
+  },
 
   // Parent
   {
@@ -169,6 +217,14 @@ const PERMISSION_CATALOG = Object.freeze([
     action: "DEACTIVATE",
     category: PERMISSION_CATEGORIES.OPERATIONAL,
     description: "Deactivate parents",
+    isDelegatable: true,
+  },
+  {
+    permissionKey: PERMISSIONS.PARENT_DELETE,
+    resource: "PARENT",
+    action: "DELETE",
+    category: PERMISSION_CATEGORIES.SENSITIVE,
+    description: "Soft-delete parents",
     isDelegatable: true,
   },
 
@@ -213,6 +269,14 @@ const PERMISSION_CATALOG = Object.freeze([
     description: "Deactivate classes",
     isDelegatable: true,
   },
+  {
+    permissionKey: PERMISSIONS.CLASS_DELETE,
+    resource: "CLASS",
+    action: "DELETE",
+    category: PERMISSION_CATEGORIES.SENSITIVE,
+    description: "Soft-delete classes",
+    isDelegatable: true,
+  },
 
 
   // Batch
@@ -254,6 +318,14 @@ const PERMISSION_CATALOG = Object.freeze([
     action: "DEACTIVATE",
     category: PERMISSION_CATEGORIES.OPERATIONAL,
     description: "Deactivate batches",
+    isDelegatable: true,
+  },
+  {
+    permissionKey: PERMISSIONS.BATCH_DELETE,
+    resource: "BATCH",
+    action: "DELETE",
+    category: PERMISSION_CATEGORIES.SENSITIVE,
+    description: "Soft-delete batches",
     isDelegatable: true,
   },
 

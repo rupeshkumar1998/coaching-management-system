@@ -10,6 +10,7 @@ const {
   listBatchValidator,
   getBatchValidator,
   updateBatchValidator,
+  deleteBatchValidator,
 } = require("../validators/batchValidator");
 
 const {
@@ -17,6 +18,7 @@ const {
   listBatchesHandler,
   getBatchHandler,
   updateBatchHandler,
+  deleteBatchHandler
 } = require("../controllers/batchController");
 
 const router = express.Router();
@@ -68,6 +70,14 @@ router.patch(
   updateBatchValidator,
   validateRequest,
   updateBatchHandler
+);
+
+router.delete(
+  "/:batchId",
+  requirePermission("BATCH_DELETE"),
+  deleteBatchValidator,
+  validateRequest,
+  deleteBatchHandler
 );
 
 module.exports = router;

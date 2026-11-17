@@ -576,10 +576,205 @@ const updateOwnerAdminStatus = async (req, res) => {
 };
 
 
+// ==========================================
+// 32.16.19 ΓÇö Owner Deletes Institute Admin
+// ==========================================
+
+const deleteOwnerAdmin = async (req, res) => {
+  try {
+    if (!req.tenantId || !req.institute) {
+      return res.status(403).json({
+        success: false,
+        message: "Verified institute ownership required",
+      });
+    }
+
+    if (
+      req.institute.approvalStatus !== "APPROVED" ||
+      !req.institute.isActive
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Institute is not approved or active",
+      });
+    }
+
+    const { adminId } = req.params;
+
+    if (!mongoose.isObjectIdOrHexString(adminId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Admin ID",
+      });
+    }
+
+    // Self-delete prevention
+    if (String(req.user._id) === String(adminId)) {
+      return res.status(403).json({
+        success: false,
+        code: "CANNOT_DELETE_SELF",
+        message: "You cannot delete your own account",
+      });
+    }
+
+    const admin = await User.findOne({
+      _id: adminId,
+      instituteId: req.tenantId,
+      role: "INSTITUTE_ADMIN",
+      isDeleted: false,
+    });
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Institute Admin not found",
+      });
+    }
+
+    // Last-admin prevention (only if deleting an active admin)
+    if (admin.isActive) {
+      const activeAdminCount = await User.countDocuments({
+        instituteId: req.tenantId,
+        role: "INSTITUTE_ADMIN",
+        isDeleted: false,
+        isActive: true,
+      });
+
+      if (activeAdminCount <= 1) {
+        return res.status(409).json({
+          success: false,
+          code: "LAST_ADMIN",
+          message:
+            "Cannot delete the last active admin. Create another admin first.",
+        });
+      }
+    }
+
+    admin.isDeleted = true;
+    admin.isActive = false;
+    admin.accountStatus = "SUSPENDED";
+
+    await admin.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Institute Admin deleted successfully",
+      data: {
+        admin: {
+          id: String(admin._id),
+          isDeleted: admin.isDeleted,
+          isActive: admin.isActive,
+          accountStatus: admin.accountStatus,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Delete Owner Admin Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete Institute Admin",
+    });
+  }
+};
+
+// ==========================================
+// 32.16.19 ΓÇö Owner Resets Institute Admin Password
+// ==========================================
+
+const resetOwnerAdminPassword = async (req, res) => {
+  try {
+    if (!req.tenantId || !req.institute) {
+      return res.status(403).json({
+        success: false,
+        message: "Verified institute ownership required",
+      });
+    }
+
+    if (
+      req.institute.approvalStatus !== "APPROVED" ||
+      !req.institute.isActive
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Institute is not approved or active",
+      });
+    }
+
+    const { adminId } = req.params;
+
+    if (!mongoose.isObjectIdOrHexString(adminId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Admin ID",
+      });
+    }
+
+    if (
+      !req.body ||
+      typeof req.body !== "object" ||
+      Array.isArray(req.body) ||
+      Object.keys(req.body).length !== 1 ||
+      typeof req.body.newPassword !== "string"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Only newPassword (string) is allowed",
+      });
+    }
+
+    const newPassword = req.body.newPassword;
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be 8-128 characters",
+      });
+    }
+
+    const admin = await User.findOne({
+      _id: adminId,
+      instituteId: req.tenantId,
+      role: "INSTITUTE_ADMIN",
+      isDeleted: false,
+    }).select("+password");
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Institute Admin not found",
+      });
+    }
+
+    if (!admin.isActive || admin.accountStatus !== "ACTIVE") {
+      return res.status(403).json({
+        success: false,
+        message: "Cannot reset password for an inactive admin",
+      });
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+    admin.password = hashedPassword;
+    await admin.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Institute Admin password reset successfully",
+    });
+  } catch (error) {
+    console.error("Reset Owner Admin Password Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to reset Institute Admin password",
+    });
+  }
+};
 module.exports = {
   createOwnerAdmin,
   getOwnerAdmins,
   getOwnerAdminById,
   updateOwnerAdmin,
   updateOwnerAdminStatus,
+  deleteOwnerAdmin,
+  resetOwnerAdminPassword,
 };

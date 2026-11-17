@@ -3,6 +3,7 @@ const {
   listBatches,
   getBatch,
   updateBatch,
+  deleteBatch,
 } = require("../services/batchService");
 
 // =========================================================
@@ -39,6 +40,8 @@ const ERROR_STATUS_MAP = Object.freeze({
   ENTITLEMENT_SNAPSHOT_MISSING: 500,
   ENTITLEMENT_CONFIGURATION_INVALID: 500,
   INTERNAL_ERROR: 500,
+
+  BATCH_HAS_STUDENTS: 409,
 });
 
 const resolveStatus = (error) => {
@@ -73,16 +76,16 @@ const serializeBatch = (b) => {
     name: b.name,
     teachers: Array.isArray(b.teachers)
       ? b.teachers.map((t) => ({
-          teacherId: String(t.teacherId),
-          subject: t.subject,
-        }))
+        teacherId: String(t.teacherId),
+        subject: t.subject,
+      }))
       : [],
     schedule: b.schedule
       ? {
-          days: b.schedule.days,
-          startTime: b.schedule.startTime,
-          endTime: b.schedule.endTime,
-        }
+        days: b.schedule.days,
+        startTime: b.schedule.startTime,
+        endTime: b.schedule.endTime,
+      }
       : null,
     status: b.status,
     createdAt: b.createdAt || null,
@@ -187,9 +190,34 @@ const updateBatchHandler = async (req, res) => {
   }
 };
 
+
+const deleteBatchHandler = async (req, res) => {
+  try {
+    const batch = await deleteBatch({
+      instituteId: req.tenantId,
+      batchId: req.params.batchId,
+      actorId: req.user._id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Batch deleted successfully",
+      data: {
+        batch: {
+          id: String(batch._id),
+          isDeleted: batch.isDeleted,
+        },
+      },
+    });
+  } catch (error) {
+    return handleControllerError(res, error, "deleteBatch");
+  }
+};
+
 module.exports = {
   createBatchHandler,
   listBatchesHandler,
   getBatchHandler,
   updateBatchHandler,
+  deleteBatchHandler,
 };

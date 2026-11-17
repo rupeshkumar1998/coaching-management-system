@@ -152,6 +152,43 @@ const assignBatchValidator = [
 
 const removeBatchValidator = [...studentIdParam];
 
+
+// ---------------------------------------------------------
+// 7. Delete
+// ---------------------------------------------------------
+
+const deleteStudentValidator = [
+  ...studentIdParam,
+  body("reason")
+    .optional({ nullable: true })
+    .custom((v) => {
+      if (v === null) return true;
+      if (typeof v !== "string") {
+        throw new Error("reason must be a string or null");
+      }
+      if (v.trim().length > 500) {
+        throw new Error("reason cannot exceed 500 characters");
+      }
+      return true;
+    }),
+];
+
+// ---------------------------------------------------------
+// 8. Reset password
+// ---------------------------------------------------------
+
+const resetStudentPasswordValidator = [
+  ...studentIdParam,
+  body("newPassword")
+    .exists()
+    .withMessage("newPassword is required")
+    .bail()
+    .isString()
+    .withMessage("newPassword must be a string")
+    .bail()
+    .isLength({ min: 8, max: 128 })
+    .withMessage("newPassword must be 8-128 characters"),
+];
 module.exports = {
   createStudentValidator,
   listStudentsValidator,
@@ -159,4 +196,6 @@ module.exports = {
   updateStudentValidator,
   assignBatchValidator,
   removeBatchValidator,
+  deleteStudentValidator,
+  resetStudentPasswordValidator,
 };

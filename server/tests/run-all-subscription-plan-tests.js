@@ -12,6 +12,28 @@ const { spawn } = require("child_process");
 const path = require("path");
 
 const TEST_FILES = [
+    // 32.16.19 - Security Hardening + CRUD + Reports
+  {
+    phase: "32.16.19",
+    label: "CRUD Delete Endpoints",
+    file: "tests/api/test-crud-deletes.js",
+  },
+  {
+    phase: "32.16.19",
+    label: "Reset Password Endpoints",
+    file: "tests/api/test-reset-password.js",
+  },
+  {
+    phase: "32.16.19",
+    label: "Dashboard Summary",
+    file: "tests/api/test-dashboard.js",
+  },
+  {
+    phase: "32.16.19",
+    label: "CSV Exports",
+    file: "tests/api/test-csv-exports.js",
+  },
+
 
   // 32.16.18 - Fees Management
   {

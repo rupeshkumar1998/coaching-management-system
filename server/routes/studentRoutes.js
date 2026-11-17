@@ -12,6 +12,8 @@ const {
   updateStudentValidator,
   assignBatchValidator,
   removeBatchValidator,
+  deleteStudentValidator,
+  resetStudentPasswordValidator,
 } = require("../validators/studentValidator");
 
 const {
@@ -21,6 +23,8 @@ const {
   updateStudentHandler,
   assignBatchHandler,
   removeBatchHandler,
+  deleteStudentHandler,
+  resetStudentPasswordHandler,
 } = require("../controllers/studentController");
 
 const router = express.Router();
@@ -88,4 +92,21 @@ router.patch(
   removeBatchHandler
 );
 
+// Soft delete student
+router.delete(
+  "/:studentId",
+  requirePermission("STUDENT_DELETE"),
+  deleteStudentValidator,
+  validateRequest,
+  deleteStudentHandler
+);
+
+// Reset student password (SENSITIVE)
+router.patch(
+  "/:studentId/reset-password",
+  requirePermission("STUDENT_RESET_PASSWORD"),
+  resetStudentPasswordValidator,
+  validateRequest,
+  resetStudentPasswordHandler
+);
 module.exports = router;

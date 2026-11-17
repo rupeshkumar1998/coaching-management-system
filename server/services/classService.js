@@ -411,8 +411,69 @@ const updateClass = async ({
   return existing;
 };
 
+
+// ---------------------------------------------------------
+// 4. DELETE CLASS (soft)
+// ---------------------------------------------------------
+
+const deleteClass = async ({ instituteId, classId, actorId }) => {
+  const normalizedInstituteId = validateInstituteId(instituteId);
+
+  if (!classId || !mongoose.isValidObjectId(classId)) {
+    throw createClassError(
+      "INVALID_CLASS_ID",
+      "A valid class ID is required"
+    );
+  }
+
+  if (!actorId || !mongoose.isValidObjectId(actorId)) {
+    throw createClassError(
+      "INVALID_ACTOR_ID",
+      "A valid actor ID is required"
+    );
+  }
+
+  // Block if any active batch exists in class
+  const Batch = require("../models/Batch");
+  const hasBatches = await Batch.exists({
+    instituteId: normalizedInstituteId,
+    classId,
+    isDeleted: false,
+  });
+
+  if (hasBatches) {
+    throw createClassError(
+      "CLASS_HAS_BATCHES",
+      "Cannot delete class with active batches. Remove batches first.",
+      409
+    );
+  }
+
+  const cls = await Class.findOne({
+    _id: classId,
+    instituteId: normalizedInstituteId,
+    isDeleted: false,
+  });
+
+  if (!cls) {
+    throw createClassError(
+      "CLASS_NOT_FOUND",
+      "Class not found",
+      404
+    );
+  }
+
+  cls.isDeleted = true;
+  cls.isActive = false;
+  cls.updatedBy = actorId;
+  await cls.save();
+
+  return cls;
+};
+
 module.exports = {
   createClass,
   listClasses,
   updateClass,
+  deleteClass,
 };
